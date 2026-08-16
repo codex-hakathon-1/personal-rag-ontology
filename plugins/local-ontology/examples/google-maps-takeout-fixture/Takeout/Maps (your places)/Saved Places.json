@@ -1,0 +1,108 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "coordinates": [135.7681, 35.0116],
+        "type": "Point"
+      },
+      "properties": {
+        "Google Maps URL": "https://www.google.com/maps/place/?q=place_id:fixture-nishiki",
+        "Location": {
+          "Address": "2 Nakagyo Ward, Kyoto, Japan",
+          "Business Name": "Nishiki Market",
+          "Country Code": "JP",
+          "Geo Coordinates": {
+            "Latitude": "35.0116",
+            "Longitude": "135.7681"
+          }
+        },
+        "Published": "2025-03-12T08:15:00Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "coordinates": [135.7747, 35.0394],
+        "type": "Point"
+      },
+      "properties": {
+        "Google Maps URL": "https://www.google.com/maps/place/?q=place_id:fixture-philosophers-path",
+        "Location": {
+          "Business Name": "Philosopher's Path",
+          "Country Code": "JP",
+          "Geo Coordinates": {
+            "Latitude": "35.0394",
+            "Longitude": "135.7747"
+          }
+        },
+        "Published": "2025-03-13T09:30:00Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "coordinates": [135.75, 35.0],
+        "type": "Point"
+      },
+      "properties": {
+        "Google Maps URL": "https://www.google.com/maps/place/?q=place_id:fixture-malformed",
+        "Location": {
+          "Address": "Kyoto, Japan"
+        },
+        "Published": "not-a-timestamp"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "coordinates": [135.76, 35.01],
+        "type": "Point"
+      },
+      "properties": {
+        "Google Maps URL": "not-a-google-maps-url",
+        "Location": {
+          "Business Name": "Invalid URL fixture"
+        },
+        "Published": "2025-03-14T10:00:00Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "coordinates": [135.77, 35.02],
+        "type": "Point"
+      },
+      "properties": {
+        "Google Maps URL": "https://www.google.com/maps/place/?q=place_id:fixture-invalid-time",
+        "Location": {
+          "Business Name": "Invalid timestamp fixture"
+        },
+        "Published": "2025-03-14 10:00:00+00:00"
+      }
+    },
+    {
+      "type": "NotAFeature",
+      "geometry": null,
+      "properties": {
+        "Google Maps URL": "https://www.google.com/maps/place/?q=place_id:fixture-invalid-feature",
+        "Location": {
+          "Business Name": "Invalid feature fixture"
+        },
+        "Published": "2025-03-15T10:00:00Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": "not-a-geometry",
+      "properties": {
+        "Google Maps URL": "https://www.google.com/maps/place/?q=place_id:fixture-invalid-geometry",
+        "Location": {
+          "Business Name": "Invalid geometry fixture"
+        },
+        "Published": "2025-03-16T10:00:00Z"
+      }
+    }
+  ]
+}

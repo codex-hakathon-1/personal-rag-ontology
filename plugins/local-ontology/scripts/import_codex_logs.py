@@ -414,7 +414,8 @@ def _upsert_membership_edge(
     world_id: str,
     node_id: str,
     conversation_id: str,
-    occurred_at: str,
+    record: ImportRecord,
+    entity: ExtractedEntity,
 ) -> None:
     edge_id = _identifier("edge", world_id, node_id, "mentioned_in", conversation_id)
     connection.execute(
@@ -432,10 +433,27 @@ def _upsert_membership_edge(
             world_id,
             node_id,
             conversation_id,
-            occurred_at,
-            occurred_at,
-            occurred_at,
+            record.occurred_at,
+            record.occurred_at,
+            record.occurred_at,
         ),
+    )
+    _upsert_evidence_row(
+        connection,
+        _identifier(
+            "evidence",
+            world_id,
+            record.source_ref,
+            "mentioned_in",
+            node_id,
+            conversation_id,
+        ),
+        None,
+        edge_id,
+        record.source_ref,
+        record.occurred_at,
+        entity.source.text,
+        record.content_hash(),
     )
 
 
@@ -619,7 +637,8 @@ def import_codex_logs(
                             world_id,
                             node_id,
                             conversation_id,
-                            document.occurred_at,
+                            record,
+                            entity,
                         )
                 for message in document.messages:
                     record = _record_for_message(document, message)

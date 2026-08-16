@@ -1,0 +1,303 @@
+{
+  "canonicalDatabase": "D:\\Github\\personal-rag-ontology\\demo-output\\realistic-user\\canonical.sqlite3",
+  "capabilityDatabase": "D:\\Github\\personal-rag-ontology\\demo-output\\realistic-user\\capability.sqlite3",
+  "persona": {
+    "displayName": "김윤서",
+    "fictional": true,
+    "period": {
+      "from": "2026-07-28T00:00:00Z",
+      "to": "2026-08-16T23:59:59Z"
+    },
+    "personaId": "demo-kim-yunseo",
+    "privacy": {
+      "derivedFromOwnerData": true,
+      "rawDataCopied": false,
+      "transformations": [
+        "person and project names replaced",
+        "locations replaced with fictional public-place names",
+        "URLs selected from public documentation or reserved example domains",
+        "dates and event combinations shifted or synthesized",
+        "credentials and absolute paths omitted"
+      ]
+    },
+    "roles": [
+      "사용성 연구자",
+      "개인 소프트웨어 개발자",
+      "수학 튜터"
+    ],
+    "world": "work"
+  },
+  "policyBoundary": {
+    "canonicalRows": 3,
+    "capabilityRows": 0
+  },
+  "queries": {
+    "내 기억 시스템": {
+      "maxRows": 100,
+      "rowCount": 10,
+      "rows": [
+        {
+          "canonical_name": "개인용 로컬 온톨로지",
+          "depth": 0,
+          "edge_occurred_at": null,
+          "edge_source_kind": null,
+          "edge_source_ref": null,
+          "node_occurred_at": "2026-08-16T03:20:00Z",
+          "node_source_kind": "codex_logs",
+          "node_source_ref": "codex://2026-08-16-local-ontology.md#L4",
+          "node_type": "topic",
+          "via_relation": null
+        },
+        {
+          "canonical_name": "SQLite WITH and recursive CTE documentation",
+          "depth": 1,
+          "edge_occurred_at": "2026-08-16T03:10:00Z",
+          "edge_source_kind": "fixture_graph",
+          "edge_source_ref": "fixture://realistic-user-demo/overlay#ontology-browser",
+          "node_occurred_at": "2026-08-16T03:10:00Z",
+          "node_source_kind": "browser_history",
+          "node_source_ref": "https://www.sqlite.org/lang_with.html",
+          "node_type": "web_page",
+          "via_relation": "researched_with"
+        },
+        {
+          "canonical_name": "개인용 로컬 온톨로지 설계",
+          "depth": 1,
+          "edge_occurred_at": "2026-08-16T03:20:00Z",
+          "edge_source_kind": "codex_logs",
+          "edge_source_ref": "codex://2026-08-16-local-ontology.md#L4",
+          "node_occurred_at": "2026-08-16T03:20:00Z",
+          "node_source_kind": "codex_logs",
+          "node_source_ref": "codex://2026-08-16-local-ontology.md#document",
+          "node_type": "conversation",
+          "via_relation": "mentioned_in"
+        },
+        {
+          "canonical_name": "사회적 챗봇 성과 분석",
+          "depth": 1,
+          "edge_occurred_at": "2026-08-16T03:20:00Z",
+          "edge_source_kind": "fixture_graph",
+          "edge_source_ref": "fixture://realistic-user-demo/overlay#ontology-project",
+          "node_occurred_at": "2026-07-29T06:50:00Z",
+          "node_source_kind": "codex_logs",
+          "node_source_ref": "codex://2026-07-29-chatbot-metrics.md#L4",
+          "node_type": "topic",
+          "via_relation": "remembers_project"
+        },
+        {
+          "canonical_name": "성수 데모 워크라운지",
+          "depth": 1,
+          "edge_occurred_at": "2026-08-15T08:10:00Z",
+          "edge_source_kind": "fixture_graph",
+          "edge_source_ref": "fixture://realistic-user-demo/overlay#ontology-place",
+          "node_occurred_at": "2026-08-15T08:10:00Z",
+          "node_source_kind": "google_maps_takeout",
+          "node_source_ref": "https://www.google.com/maps/place/?q=place_id:demo-seongsu-work-lounge",
+          "node_type": "place",
+          "via_relation": "worked_at"
+        },
+        {
+          "canonical_name": "pandas DataFrame.merge documentation",
+          "depth": 2,
+          "edge_occurred_at": "2026-07-29T06:45:00Z",
+          "edge_source_kind": "fixture_graph",
+          "edge_source_ref": "fixture://realistic-user-demo/overlay#chatbot-browser",
+          "node_occurred_at": "2026-07-29T06:45:00Z",
+          "node_source_kind": "browser_history",
+          "node_source_ref": "https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html",
+          "node_type": "web_page",
+          "via_relation": "researched_with"
+        },
+        {
+          "canonical_name": "www.sqlite.org",
+          "depth": 2,
+          "edge_occurred_at": "2026-08-16T03:10:00Z",
+          "edge_source_kind": "browser_history",
+          "edge_source_ref": "https://www.sqlite.org/lang_with.html",
+          "node_occurred_at": "2026-08-16T03:10:00Z",
+          "node_source_kind": "browser_history",
+          "node_source_ref": "https://www.sqlite.org/lang_with.html",
+          "node_type": "topic",
+          "via_relation": "about"
+        },
+        {
+          "canonical_name": "관찰 기간은 설치 다음 날부터 28일로 정한다.",
+          "depth": 2,
+          "edge_occurred_at": "2026-07-29T06:50:00Z",
+          "edge_source_kind": "fixture_graph",
+          "edge_source_ref": "fixture://realistic-user-demo/overlay#chatbot-decision",
+          "node_occurred_at": "2026-07-29T06:50:00Z",
+          "node_source_kind": "codex_logs",
+          "node_source_ref": "codex://2026-07-29-chatbot-metrics.md#L13",
+          "node_type": "decision",
+          "via_relation": "decided"
+        },
+        {
+          "canonical_name": "사회적 챗봇 사용량 분석",
+          "depth": 2,
+          "edge_occurred_at": "2026-07-29T06:50:00Z",
+          "edge_source_kind": "codex_logs",
+          "edge_source_ref": "codex://2026-07-29-chatbot-metrics.md#L4",
+          "node_occurred_at": "2026-07-29T06:50:00Z",
+          "node_source_kind": "codex_logs",
+          "node_source_ref": "codex://2026-07-29-chatbot-metrics.md#L13",
+          "node_type": "conversation",
+          "via_relation": "mentioned_in"
+        },
+        {
+          "canonical_name": "서울 데이터랩",
+          "depth": 2,
+          "edge_occurred_at": "2026-07-29T04:30:00Z",
+          "edge_source_kind": "fixture_graph",
+          "edge_source_ref": "fixture://realistic-user-demo/overlay#chatbot-place",
+          "node_occurred_at": "2026-07-29T04:30:00Z",
+          "node_source_kind": "google_maps_takeout",
+          "node_source_ref": "https://www.google.com/maps/place/?q=place_id:demo-seoul-data-lab",
+          "node_type": "place",
+          "via_relation": "worked_at"
+        }
+      ],
+      "truncated": false
+    },
+    "챗봇 분석": {
+      "maxRows": 100,
+      "rowCount": 7,
+      "rows": [
+        {
+          "canonical_name": "사회적 챗봇 성과 분석",
+          "depth": 0,
+          "edge_occurred_at": null,
+          "edge_source_kind": null,
+          "edge_source_ref": null,
+          "node_occurred_at": "2026-07-29T06:50:00Z",
+          "node_source_kind": "codex_logs",
+          "node_source_ref": "codex://2026-07-29-chatbot-metrics.md#L4",
+          "node_type": "topic",
+          "via_relation": null
+        },
+        {
+          "canonical_name": "pandas DataFrame.merge documentation",
+          "depth": 1,
+          "edge_occurred_at": "2026-07-29T06:45:00Z",
+          "edge_source_kind": "fixture_graph",
+          "edge_source_ref": "fixture://realistic-user-demo/overlay#chatbot-browser",
+          "node_occurred_at": "2026-07-29T06:45:00Z",
+          "node_source_kind": "browser_history",
+          "node_source_ref": "https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html",
+          "node_type": "web_page",
+          "via_relation": "researched_with"
+        },
+        {
+          "canonical_name": "관찰 기간은 설치 다음 날부터 28일로 정한다.",
+          "depth": 1,
+          "edge_occurred_at": "2026-07-29T06:50:00Z",
+          "edge_source_kind": "fixture_graph",
+          "edge_source_ref": "fixture://realistic-user-demo/overlay#chatbot-decision",
+          "node_occurred_at": "2026-07-29T06:50:00Z",
+          "node_source_kind": "codex_logs",
+          "node_source_ref": "codex://2026-07-29-chatbot-metrics.md#L13",
+          "node_type": "decision",
+          "via_relation": "decided"
+        },
+        {
+          "canonical_name": "사회적 챗봇 사용량 분석",
+          "depth": 1,
+          "edge_occurred_at": "2026-07-29T06:50:00Z",
+          "edge_source_kind": "codex_logs",
+          "edge_source_ref": "codex://2026-07-29-chatbot-metrics.md#L4",
+          "node_occurred_at": "2026-07-29T06:50:00Z",
+          "node_source_kind": "codex_logs",
+          "node_source_ref": "codex://2026-07-29-chatbot-metrics.md#L13",
+          "node_type": "conversation",
+          "via_relation": "mentioned_in"
+        },
+        {
+          "canonical_name": "서울 데이터랩",
+          "depth": 1,
+          "edge_occurred_at": "2026-07-29T04:30:00Z",
+          "edge_source_kind": "fixture_graph",
+          "edge_source_ref": "fixture://realistic-user-demo/overlay#chatbot-place",
+          "node_occurred_at": "2026-07-29T04:30:00Z",
+          "node_source_kind": "google_maps_takeout",
+          "node_source_ref": "https://www.google.com/maps/place/?q=place_id:demo-seoul-data-lab",
+          "node_type": "place",
+          "via_relation": "worked_at"
+        },
+        {
+          "canonical_name": "pandas.pydata.org",
+          "depth": 2,
+          "edge_occurred_at": "2026-07-29T06:45:00Z",
+          "edge_source_kind": "browser_history",
+          "edge_source_ref": "https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html",
+          "node_occurred_at": "2026-07-29T06:45:00Z",
+          "node_source_kind": "browser_history",
+          "node_source_ref": "https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html",
+          "node_type": "topic",
+          "via_relation": "about"
+        },
+        {
+          "canonical_name": "사회적 챗봇 사용량 분석",
+          "depth": 2,
+          "edge_occurred_at": "2026-07-29T06:50:00Z",
+          "edge_source_kind": "codex_logs",
+          "edge_source_ref": "codex://2026-07-29-chatbot-metrics.md#L13",
+          "node_occurred_at": "2026-07-29T06:50:00Z",
+          "node_source_kind": "codex_logs",
+          "node_source_ref": "codex://2026-07-29-chatbot-metrics.md#L13",
+          "node_type": "conversation",
+          "via_relation": "mentioned_in"
+        }
+      ],
+      "truncated": false
+    }
+  },
+  "reports": {
+    "browserHistory": {
+      "excludedPages": 1,
+      "exclusions": [
+        {
+          "count": 1,
+          "pattern": "demo_private_inbox"
+        }
+      ],
+      "importedPages": 7,
+      "importedVisits": 10,
+      "topicCandidates": 7,
+      "world": "work"
+    },
+    "codexLogs": {
+      "explicitSupersessions": 0,
+      "importedConversations": 4,
+      "importedDecisions": 4,
+      "importedMessages": 8,
+      "importedPlans": 4,
+      "redactions": {
+        "configured_secret_path": 0,
+        "key_like_value": 0,
+        "token_like_value": 0
+      },
+      "topicCandidates": 10,
+      "world": "work"
+    },
+    "googleMapsTakeout": {
+      "archiveErrors": [],
+      "archiveStatus": "supported",
+      "format": "google_maps_saved_places_geojson_v1",
+      "importedFiles": 1,
+      "importedPlaces": 3,
+      "malformedRecords": [],
+      "skippedPaths": [],
+      "warnings": [],
+      "world": "work"
+    }
+  },
+  "resultPath": "D:\\Github\\personal-rag-ontology\\demo-output\\realistic-user\\demo-result.json",
+  "selectedWorld": "work",
+  "sessionPath": "D:\\Github\\personal-rag-ontology\\demo-output\\realistic-user\\session.json",
+  "sourceKinds": [
+    "browser_history",
+    "codex_logs",
+    "fixture_graph",
+    "google_maps_takeout"
+  ]
+}

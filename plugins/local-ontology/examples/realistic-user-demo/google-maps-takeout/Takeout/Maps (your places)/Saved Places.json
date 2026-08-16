@@ -1,0 +1,53 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [126.978, 37.5665]
+      },
+      "properties": {
+        "Google Maps URL": "https://www.google.com/maps/place/?q=place_id:demo-seoul-data-lab",
+        "Location": {
+          "Address": "대한민국 서울특별시 중구 데모로 28 (합성 주소)",
+          "Business Name": "서울 데이터랩",
+          "Country Code": "KR"
+        },
+        "Published": "2026-07-29T04:30:00Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [127.0557, 37.5443]
+      },
+      "properties": {
+        "Google Maps URL": "https://www.google.com/maps/place/?q=place_id:demo-seongsu-work-lounge",
+        "Location": {
+          "Address": "대한민국 서울특별시 성동구 샘플길 16 (합성 주소)",
+          "Business Name": "성수 데모 워크라운지",
+          "Country Code": "KR"
+        },
+        "Published": "2026-08-15T08:10:00Z"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [126.922, 37.556]
+      },
+      "properties": {
+        "Google Maps URL": "https://www.google.com/maps/place/?q=place_id:demo-mapo-audio-room",
+        "Location": {
+          "Address": "대한민국 서울특별시 마포구 예시로 7 (합성 주소)",
+          "Business Name": "마포 데모 음악연습실",
+          "Country Code": "KR"
+        },
+        "Published": "2026-08-10T10:00:00Z"
+      }
+    }
+  ]
+}

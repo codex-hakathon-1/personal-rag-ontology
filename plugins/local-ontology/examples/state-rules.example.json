@@ -1,0 +1,6 @@
+{
+  "dormant_after_days": {
+    "plan": 90,
+    "event": 365
+  }
+}

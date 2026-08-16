@@ -1,0 +1,8 @@
+{
+  "patterns": [
+    {
+      "name": "demo_private_inbox",
+      "regex": "mail\\.example\\.invalid|[?&](?:token|key)="
+    }
+  ]
+}

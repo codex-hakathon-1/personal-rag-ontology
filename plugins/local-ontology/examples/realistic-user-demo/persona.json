@@ -1,0 +1,26 @@
+{
+  "fictional": true,
+  "personaId": "demo-kim-yunseo",
+  "displayName": "김윤서",
+  "roles": [
+    "사용성 연구자",
+    "개인 소프트웨어 개발자",
+    "수학 튜터"
+  ],
+  "period": {
+    "from": "2026-07-28T00:00:00Z",
+    "to": "2026-08-16T23:59:59Z"
+  },
+  "world": "work",
+  "privacy": {
+    "derivedFromOwnerData": true,
+    "rawDataCopied": false,
+    "transformations": [
+      "person and project names replaced",
+      "locations replaced with fictional public-place names",
+      "URLs selected from public documentation or reserved example domains",
+      "dates and event combinations shifted or synthesized",
+      "credentials and absolute paths omitted"
+    ]
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "sessionIdentifier": "d8699166fb744614a00cc35b9bd3d1c7",
+  "selectedWorld": "work",
+  "policyContract": {
+    "include_sources": [
+      "browser_history",
+      "codex_logs",
+      "fixture_graph",
+      "google_maps_takeout"
+    ],
+    "allow_node_types": [
+      "conversation",
+      "decision",
+      "place",
+      "plan",
+      "topic",
+      "web_page"
+    ],
+    "include_states": [
+      "active"
+    ],
+    "deny_sensitivity": [
+      "secret",
+      "identity"
+    ]
+  },
+  "canonicalDatabase": "D:\\Github\\personal-rag-ontology\\demo-output\\realistic-user\\canonical.sqlite3",
+  "queryAuditLog": "D:\\Github\\personal-rag-ontology\\demo-output\\realistic-user\\query-audit-d8699166fb744614a00cc35b9bd3d1c7.jsonl",
+  "queryLimits": {
+    "maxRows": 100,
+    "maxExecutionMs": 1000
+  },
+  "schemaGuidance": {
+    "nodes": [
+      "node_id",
+      "world_id",
+      "type",
+      "canonical_name",
+      "summary",
+      "state",
+      "sensitivity",
+      "valid_from",
+      "valid_to",
+      "last_seen_at",
+      "superseded_by",
+      "created_at",
+      "updated_at"
+    ],
+    "node_aliases": [
+      "alias",
+      "node_id",
+      "source",
+      "confidence"
+    ],
+    "edges": [
+      "edge_id",
+      "world_id",
+      "from_node_id",
+      "relation",
+      "to_node_id",
+      "state",
+      "valid_from",
+      "valid_to",
+      "confidence",
+      "evidence_count",
+      "created_at",
+      "updated_at"
+    ],
+    "evidence": [
+      "evidence_id",
+      "node_id",
+      "edge_id",
+      "source_kind",
+      "source_ref",
+      "occurred_at",
+      "observed_at",
+      "excerpt",
+      "content_hash"
+    ]
+  }
+}

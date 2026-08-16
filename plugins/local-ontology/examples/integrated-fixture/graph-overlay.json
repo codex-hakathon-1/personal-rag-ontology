@@ -1,0 +1,100 @@
+{
+  "policyBoundaryNodes": [
+    {
+      "worldId": "personal",
+      "canonicalName": "Forbidden fixture: other world",
+      "state": "active",
+      "sensitivity": "normal",
+      "occurredAt": "2025-03-01T00:00:00Z",
+      "sourceRef": "fixture://integrated/forbidden/other-world"
+    },
+    {
+      "worldId": "travel",
+      "canonicalName": "Forbidden fixture: dormant",
+      "state": "dormant",
+      "sensitivity": "normal",
+      "occurredAt": "2025-03-02T00:00:00Z",
+      "sourceRef": "fixture://integrated/forbidden/dormant"
+    },
+    {
+      "worldId": "travel",
+      "canonicalName": "Forbidden fixture: secret",
+      "state": "active",
+      "sensitivity": "secret",
+      "occurredAt": "2025-03-03T00:00:00Z",
+      "sourceRef": "fixture://integrated/forbidden/secret"
+    }
+  ],
+  "aliases": [
+    {
+      "node": {
+        "type": "place",
+        "canonicalName": "Nishiki Market"
+      },
+      "alias": "Kyoto market",
+      "confidence": 1.0
+    }
+  ],
+  "edges": [
+    {
+      "from": {
+        "type": "place",
+        "canonicalName": "Nishiki Market"
+      },
+      "relation": "related_to",
+      "to": {
+        "type": "topic",
+        "canonicalName": "Kyoto"
+      },
+      "confidence": 1.0,
+      "occurredAt": "2025-03-18T09:30:00Z",
+      "sourceRef": "fixture://integrated/graph-overlay.json#place-to-topic",
+      "excerpt": "The deterministic fixture relates the saved market to Kyoto."
+    },
+    {
+      "from": {
+        "type": "topic",
+        "canonicalName": "Kyoto"
+      },
+      "relation": "includes",
+      "to": {
+        "type": "place",
+        "canonicalName": "Nishiki Market"
+      },
+      "confidence": 1.0,
+      "occurredAt": "2025-03-18T09:30:00Z",
+      "sourceRef": "fixture://integrated/graph-overlay.json#topic-to-place",
+      "excerpt": "The two-edge fixture cycle verifies that traversals do not revisit their anchor."
+    },
+    {
+      "from": {
+        "type": "topic",
+        "canonicalName": "Kyoto"
+      },
+      "relation": "researched_with",
+      "to": {
+        "type": "web_page",
+        "canonicalName": "Kyoto itinerary"
+      },
+      "confidence": 1.0,
+      "occurredAt": "2025-03-18T09:30:00Z",
+      "sourceRef": "fixture://integrated/graph-overlay.json#topic-to-page",
+      "excerpt": "The deterministic fixture connects the Kyoto topic to browsing research."
+    },
+    {
+      "from": {
+        "type": "web_page",
+        "canonicalName": "Kyoto itinerary"
+      },
+      "relation": "mentions",
+      "to": {
+        "type": "place",
+        "canonicalName": "Nishiki Market"
+      },
+      "confidence": 1.0,
+      "occurredAt": "2025-08-03T12:00:00Z",
+      "sourceRef": "fixture://integrated/graph-overlay.json#page-to-place",
+      "excerpt": "The deterministic fixture closes the three-source graph cycle."
+    }
+  ]
+}

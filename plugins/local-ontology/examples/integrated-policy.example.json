@@ -1,0 +1,22 @@
+{
+  "worlds": {
+    "travel": {
+      "include_sources": [
+        "browser_history",
+        "codex_logs",
+        "fixture_graph",
+        "google_maps_takeout"
+      ],
+      "allow_node_types": [
+        "conversation",
+        "decision",
+        "place",
+        "plan",
+        "topic",
+        "web_page"
+      ],
+      "include_states": ["active"],
+      "deny_sensitivity": ["secret", "identity"]
+    }
+  }
+}
