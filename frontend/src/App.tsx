@@ -1,20 +1,27 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from './api/client'
-import type { Attribute, AttributePatch, Project, Source, WorkspaceSnapshot } from './domain'
+import type { Attribute, AttributePatch, Project, ProjectAttribute, ProjectAttributeNode, ProjectAttributeStatus, Source, WorkspaceSnapshot } from './domain'
+import JellyPet from './JellyPet'
+import ProjectAttributeTree from './ProjectAttributeTree'
 
-type View = 'memory' | 'projects' | 'review' | 'sources'
+type View = 'projects' | 'review' | 'sources'
+type ProjectFilter = 'all' | 'active' | 'unselected' | 'deactivated'
+type TupleNode = Exclude<ProjectAttributeNode, 'attribute'>
+
+interface TupleSelection {
+  projectId: string
+  attributeId: string
+  node: TupleNode
+}
 type IconName = View | 'search' | 'close' | 'more' | 'chevron' | 'check' | 'minus' | 'arrow' | 'sync' | 'spark'
 
 const navItems: { id: View; label: string }[] = [
-  { id: 'memory', label: 'Memory' },
   { id: 'projects', label: 'Projects' },
-  { id: 'review', label: 'Review' },
   { id: 'sources', label: 'Sources' },
 ]
 
 function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
-    memory: <><path d="M4 5.5h12M4 10h12M4 14.5h8" /></>,
     projects: <><path d="M3.5 5.5h5l1.4 1.7h6.6v8.3h-13z" /><path d="M3.5 7.2h13" /></>,
     review: <><path d="M5 3.5h10v13H5z" /><path d="m7.5 10 1.7 1.7 3.6-4" /></>,
     sources: <><ellipse cx="10" cy="5" rx="6.5" ry="2.5" /><path d="M3.5 5v5c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5V5M3.5 10v5c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-5" /></>,
@@ -54,11 +61,12 @@ function sourceLabel(source?: Source) {
 
 function App() {
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null)
-  const [view, setView] = useState<View>('memory')
+  const [view, setView] = useState<View>('projects')
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null)
-  const [selectedProjectId, setSelectedProjectId] = useState('project-rag')
-  const [query, setQuery] = useState('')
-  const [memoryFilter, setMemoryFilter] = useState<'all' | 'kept' | 'suggested' | 'ignored'>('all')
+  const [selectedTuple, setSelectedTuple] = useState<TupleSelection | null>(null)
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
+  const [projectQuery, setProjectQuery] = useState('')
+  const [projectMemoryFilter, setProjectMemoryFilter] = useState<ProjectFilter>('all')
   const [notice, setNotice] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
 
@@ -70,8 +78,8 @@ function App() {
     const focusSearch = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault()
-        setView('memory')
-        window.setTimeout(() => document.getElementById('memory-search')?.focus(), 0)
+        setView('projects')
+        window.setTimeout(() => document.getElementById('project-attribute-search')?.focus(), 0)
       }
     }
     window.addEventListener('keydown', focusSearch)
@@ -85,8 +93,6 @@ function App() {
   }, [notice])
 
   const selectedAttribute = workspace?.attributes.find((item) => item.id === selectedAttributeId) ?? null
-  const pendingCount = workspace?.attributes.filter((attribute) => attribute.status === 'suggested').length ?? 0
-
   const updateAttribute = async (attribute: Attribute, patch: AttributePatch, message?: string) => {
     const previous = workspace
     if (!previous) return
@@ -111,7 +117,11 @@ function App() {
     if (!workspace) return
     const previous = workspace
     setSelectedAttributeId(null)
-    setWorkspace({ ...workspace, attributes: workspace.attributes.filter((item) => item.id !== attribute.id) })
+    setWorkspace({
+      ...workspace,
+      attributes: workspace.attributes.filter((item) => item.id !== attribute.id),
+      projectAttributes: workspace.projectAttributes.filter((item) => item.attributeId !== attribute.id),
+    })
     try {
       await api.deleteAttribute(attribute.id)
       setNotice('Attribute deleted')
@@ -121,24 +131,54 @@ function App() {
     }
   }
 
-  const addAttributeToProject = async (projectId: string, attribute: Attribute) => {
+  const updateProjectNode = async (projectId: string, attribute: Attribute, node: ProjectAttributeNode, status: ProjectAttributeStatus) => {
     if (!workspace) return
     const previous = workspace
     const existing = workspace.projectAttributes.find((item) => item.projectId === projectId && item.attributeId === attribute.id)
-    const optimistic = existing
-      ? workspace.projectAttributes.map((item) => item === existing ? { ...item, status: 'added' as const } : item)
-      : [...workspace.projectAttributes, { projectId, attributeId: attribute.id, status: 'added' as const, suggestedAt: new Date().toISOString() }]
+    if (!existing) return
+    const statusField: Record<ProjectAttributeNode, keyof Pick<ProjectAttribute, 'status' | 'valueStatus' | 'sourceStatus' | 'confidenceStatus'>> = {
+      attribute: 'status',
+      value: 'valueStatus',
+      source: 'sourceStatus',
+      confidence: 'confidenceStatus',
+    }
+    const optimistic = workspace.projectAttributes.map((item) => item === existing ? { ...item, [statusField[node]]: status } : item)
     setWorkspace({ ...workspace, projectAttributes: optimistic })
     try {
-      const updated = await api.updateProjectAttribute(projectId, attribute.id, 'added')
+      const updated = await api.updateProjectAttributeNode(projectId, attribute.id, node, status)
       setWorkspace((current) => current ? {
         ...current,
         projectAttributes: current.projectAttributes.map((item) => item.projectId === projectId && item.attributeId === attribute.id ? updated : item),
       } : current)
-      setNotice('Added to project')
+      const statusMessage: Record<ProjectAttributeStatus, string> = {
+        added: 'Attribute active in project',
+        suggested: 'Attribute left unselected',
+        deactivated: 'Attribute deactivated',
+      }
+      setNotice(statusMessage[status])
     } catch {
       setWorkspace(previous)
       setNotice('The project could not be updated.')
+    }
+  }
+
+  const updateProjectRoot = async (project: Project, status: ProjectAttributeStatus) => {
+    if (!workspace) return
+    const previous = workspace
+    setWorkspace({
+      ...workspace,
+      projects: workspace.projects.map((item) => item.id === project.id ? { ...item, memoryStatus: status } : item),
+    })
+    try {
+      const updated = await api.updateProject(project.id, { memoryStatus: status })
+      setWorkspace((current) => current ? {
+        ...current,
+        projects: current.projects.map((item) => item.id === updated.id ? updated : item),
+      } : current)
+      setNotice(status === 'deactivated' ? 'Project tree deactivated' : 'Project tree state updated')
+    } catch {
+      setWorkspace(previous)
+      setNotice('The project root could not be updated.')
     }
   }
 
@@ -157,34 +197,25 @@ function App() {
   }
 
   return (
-    <div className={`app-shell ${selectedAttribute ? 'has-inspector' : ''}`}>
-      <Sidebar view={view} pendingCount={pendingCount} onChange={(nextView) => { setView(nextView); setSelectedAttributeId(null) }} />
+    <div className={`app-shell ${selectedAttribute || selectedTuple ? 'has-inspector' : ''}`}>
+      <Sidebar view={view} onChange={(nextView) => { setView(nextView); setSelectedAttributeId(null); setSelectedTuple(null) }} />
       <main className="main-pane">
         {!workspace ? (
           <div className="loading-state"><span className="loading-mark" />Loading local memory…</div>
         ) : (
           <>
-            {view === 'memory' && (
-              <MemoryView
-                workspace={workspace}
-                query={query}
-                onQueryChange={setQuery}
-                filter={memoryFilter}
-                onFilterChange={setMemoryFilter}
-                selectedId={selectedAttributeId}
-                onSelect={setSelectedAttributeId}
-                onUpdate={updateAttribute}
-              />
-            )}
             {view === 'projects' && (
               <ProjectsView
                 workspace={workspace}
                 selectedProjectId={selectedProjectId}
-                onProjectChange={setSelectedProjectId}
-                selectedId={selectedAttributeId}
-                onSelect={setSelectedAttributeId}
-                onUpdate={updateAttribute}
-                onAddToProject={addAttributeToProject}
+                onProjectChange={(id) => { setSelectedProjectId(id); setSelectedAttributeId(null); setSelectedTuple(null); setProjectQuery(''); setProjectMemoryFilter('all') }}
+                query={projectQuery}
+                onQueryChange={setProjectQuery}
+                filter={projectMemoryFilter}
+                onFilterChange={setProjectMemoryFilter}
+                onOpenTuple={(selection) => { setSelectedTuple(selection); setSelectedAttributeId(null) }}
+                onProjectStatusChange={updateProjectNode}
+                onProjectRootChange={updateProjectRoot}
               />
             )}
             {view === 'review' && (
@@ -204,32 +235,52 @@ function App() {
           key={selectedAttribute.id}
           attribute={selectedAttribute}
           source={workspace.sources.find((source) => source.id === selectedAttribute.sourceId)}
-          projects={workspace.projects.filter((project) => selectedAttribute.projectIds.includes(project.id))}
+          projects={workspace.projects.filter((project) => workspace.projectAttributes.some((item) => item.projectId === project.id && item.attributeId === selectedAttribute.id && item.status === 'added'))}
           allProjects={workspace.projects}
           onClose={() => setSelectedAttributeId(null)}
           onUpdate={updateAttribute}
+          onProjectStatusChange={(projectId, status) => updateProjectNode(projectId, selectedAttribute, 'attribute', status)}
           onDelete={deleteAttribute}
         />
       )}
+      {workspace && selectedTuple && (() => {
+        const attribute = workspace.attributes.find((item) => item.id === selectedTuple.attributeId)
+        const project = workspace.projects.find((item) => item.id === selectedTuple.projectId)
+        const relation = workspace.projectAttributes.find((item) => item.projectId === selectedTuple.projectId && item.attributeId === selectedTuple.attributeId)
+        const source = attribute ? workspace.sources.find((item) => item.id === attribute.sourceId) : undefined
+        if (!attribute || !project || !relation) return null
+        return (
+          <TupleInspector
+            key={`${attribute.id}:${selectedTuple.node}`}
+            attribute={attribute}
+            project={project}
+            relation={relation}
+            source={source}
+            node={selectedTuple.node}
+            onClose={() => setSelectedTuple(null)}
+            onUpdate={updateAttribute}
+            onNodeStatusChange={(status) => updateProjectNode(project.id, attribute, selectedTuple.node, status)}
+          />
+        )
+      })()}
+      <JellyPet />
       {notice && <div className="notice" role="status"><Icon name="check" size={15} />{notice}</div>}
     </div>
   )
 }
 
-function Sidebar({ view, pendingCount, onChange }: { view: View; pendingCount: number; onChange: (view: View) => void }) {
+function Sidebar({ view, onChange }: { view: View; onChange: (view: View) => void }) {
   return (
     <aside className="sidebar">
       <div className="brand">
         <span className="brand-mark" aria-hidden="true"><i /><b /></span>
-        <span className="brand-word">Index</span>
-        <span className="brand-edition">Local</span>
+        <span className="brand-word">Me<span className="brand-accent">S</span>ource</span>
       </div>
       <nav aria-label="Primary navigation">
         {navItems.map((item) => (
           <button key={item.id} className={`nav-item ${view === item.id ? 'active' : ''}`} onClick={() => onChange(item.id)}>
             <Icon name={item.id} size={17} />
             <span>{item.label}</span>
-            {item.id === 'review' && pendingCount > 0 && <span className="nav-count">{pendingCount}</span>}
           </button>
         ))}
       </nav>
@@ -246,84 +297,33 @@ function Sidebar({ view, pendingCount, onChange }: { view: View; pendingCount: n
   )
 }
 
-function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description: string; action?: React.ReactNode }) {
+function PageHeader({ eyebrow, title, description, action }: { eyebrow?: string | null; title: string; description?: string; action?: React.ReactNode }) {
   const sectionLabels: Record<string, string> = {
-    Memory: '01 / Local archive',
-    Review: '03 / Curation queue',
-    Sources: '04 / Input registry',
+    Projects: '01 / Project index',
+    Review: '02 / Curation queue',
+    Sources: '03 / Input registry',
   }
 
   return (
     <header className="page-header">
       <div className="page-heading">
-        <div className="eyebrow">{eyebrow ?? sectionLabels[title] ?? 'Local index'}</div>
+        {eyebrow !== null && <div className="eyebrow">{eyebrow ?? sectionLabels[title] ?? 'Local index'}</div>}
         <h1>{title}</h1>
       </div>
       <div className="page-context">
-        <p>{description}</p>
+        {description && <p>{description}</p>}
         {action && <div className="header-action">{action}</div>}
       </div>
     </header>
   )
 }
 
-function MemoryView({ workspace, query, onQueryChange, filter, onFilterChange, selectedId, onSelect, onUpdate }: {
-  workspace: WorkspaceSnapshot
-  query: string
-  onQueryChange: (value: string) => void
-  filter: 'all' | 'kept' | 'suggested' | 'ignored'
-  onFilterChange: (value: 'all' | 'kept' | 'suggested' | 'ignored') => void
-  selectedId: string | null
-  onSelect: (id: string) => void
-  onUpdate: (attribute: Attribute, patch: AttributePatch, message?: string) => void
-}) {
-  const filtered = workspace.attributes.filter((attribute) => {
-    const matchesFilter = filter === 'all' || attribute.status === filter
-    const haystack = `${attribute.title} ${attribute.category} ${attribute.value}`.toLowerCase()
-    return matchesFilter && haystack.includes(query.toLowerCase())
-  })
-
-  return (
-    <div className="page-content">
-      <PageHeader title="Memory" description="The facts, decisions, and preferences that can inform your work." />
-      <div className="toolbar">
-        <label className="search-field">
-          <Icon name="search" size={15} />
-          <input id="memory-search" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search memory" aria-label="Search memory" />
-          <kbd>⌘K</kbd>
-        </label>
-        <div className="filter-tabs" aria-label="Memory status">
-          {(['all', 'kept', 'suggested', 'ignored'] as const).map((item) => (
-            <button key={item} className={filter === item ? 'active' : ''} onClick={() => onFilterChange(item)}>
-              {item[0].toUpperCase() + item.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="list-meta">
-        <span>{filtered.length} attributes</span>
-        <span>Sorted by newest</span>
-      </div>
-      <AttributeList
-        attributes={filtered}
-        sources={workspace.sources}
-        selectedId={selectedId}
-        onSelect={onSelect}
-        onUpdate={onUpdate}
-      />
-    </div>
-  )
-}
-
-function AttributeList({ attributes, sources, selectedId, onSelect, onUpdate, projectMode = false, addedAttributeIds, onAddToProject }: {
+function AttributeList({ attributes, sources, selectedId, onSelect, onUpdate }: {
   attributes: Attribute[]
   sources: Source[]
   selectedId: string | null
   onSelect: (id: string) => void
   onUpdate: (attribute: Attribute, patch: AttributePatch, message?: string) => void
-  projectMode?: boolean
-  addedAttributeIds?: Set<string>
-  onAddToProject?: (attribute: Attribute) => void
 }) {
   if (attributes.length === 0) {
     return <div className="empty-state">Nothing here yet.</div>
@@ -339,113 +339,160 @@ function AttributeList({ attributes, sources, selectedId, onSelect, onUpdate, pr
           selected={attribute.id === selectedId}
           onSelect={() => onSelect(attribute.id)}
           onUpdate={onUpdate}
-          projectMode={projectMode}
-          isAddedToProject={addedAttributeIds?.has(attribute.id) ?? false}
-          onAddToProject={onAddToProject}
         />
       ))}
     </div>
   )
 }
 
-function AttributeRow({ attribute, source, selected, onSelect, onUpdate, projectMode, isAddedToProject, onAddToProject }: {
+function AttributeRow({ attribute, source, selected, onSelect, onUpdate }: {
   attribute: Attribute
   source?: Source
   selected: boolean
   onSelect: () => void
   onUpdate: (attribute: Attribute, patch: AttributePatch, message?: string) => void
-  projectMode: boolean
-  isAddedToProject: boolean
-  onAddToProject?: (attribute: Attribute) => void
 }) {
   return (
-    <div className={`attribute-row ${selected ? 'selected' : ''} ${attribute.status === 'ignored' ? 'is-ignored' : ''}`} role="button" tabIndex={0} onClick={onSelect} onKeyDown={(event) => { if (event.key === 'Enter') onSelect() }}>
+    <div className={`attribute-row ${selected ? 'selected' : ''} ${attribute.status === 'ignored' ? 'is-ignored' : ''}`} onClick={onSelect}>
       <div className={`status-tick ${attribute.status}`} aria-hidden="true">{attribute.status === 'kept' && <Icon name="check" size={11} />}</div>
-      <div className="attribute-title">{attribute.title}</div>
+      <button className="attribute-title" onClick={(event) => { event.stopPropagation(); onSelect() }}>{attribute.title}</button>
       <span className="category-label">{attribute.category}</span>
       <span className="source-label">{sourceLabel(source)}</span>
       <div className="row-actions">
-        {projectMode && !isAddedToProject && (
-          <button className="text-action add-action" onClick={(event) => { event.stopPropagation(); onAddToProject?.(attribute) }}>Add to project</button>
-        )}
         {attribute.status !== 'kept' && (
           <button className="text-action" onClick={(event) => { event.stopPropagation(); onUpdate(attribute, { status: 'kept' }, 'Attribute kept') }}>Keep</button>
         )}
         {attribute.status !== 'ignored' && (
           <button className="text-action quiet" onClick={(event) => { event.stopPropagation(); onUpdate(attribute, { status: 'ignored' }, 'Attribute ignored') }}>Ignore</button>
         )}
-        {projectMode && <button className="text-action quiet" aria-label={`Edit ${attribute.title}`} onClick={(event) => { event.stopPropagation(); onSelect() }}>Edit</button>}
       </div>
     </div>
   )
 }
 
-function ProjectsView({ workspace, selectedProjectId, onProjectChange, selectedId, onSelect, onUpdate, onAddToProject }: {
+function ProjectsView({ workspace, selectedProjectId, onProjectChange, query, onQueryChange, filter, onFilterChange, onOpenTuple, onProjectStatusChange, onProjectRootChange }: {
   workspace: WorkspaceSnapshot
-  selectedProjectId: string
-  onProjectChange: (id: string) => void
-  selectedId: string | null
-  onSelect: (id: string) => void
-  onUpdate: (attribute: Attribute, patch: AttributePatch, message?: string) => void
-  onAddToProject: (projectId: string, attribute: Attribute) => void
+  selectedProjectId: string | null
+  onProjectChange: (id: string | null) => void
+  query: string
+  onQueryChange: (value: string) => void
+  filter: ProjectFilter
+  onFilterChange: (value: ProjectFilter) => void
+  onOpenTuple: (selection: TupleSelection) => void
+  onProjectStatusChange: (projectId: string, attribute: Attribute, node: ProjectAttributeNode, status: ProjectAttributeStatus) => void
+  onProjectRootChange: (project: Project, status: ProjectAttributeStatus) => void
 }) {
-  const project = workspace.projects.find((item) => item.id === selectedProjectId) ?? workspace.projects[0]
-  const projectAttributes = workspace.attributes.filter((attribute) => attribute.projectIds.includes(project.id) && attribute.status !== 'ignored')
-  const groups = useMemo(() => {
-    return projectAttributes.reduce<Record<string, Attribute[]>>((result, attribute) => {
-      result[attribute.category] = [...(result[attribute.category] ?? []), attribute]
-      return result
-    }, {})
-  }, [projectAttributes])
+  const project = workspace.projects.find((item) => item.id === selectedProjectId)
+
+  if (!project) {
+    return <ProjectPicker workspace={workspace} onSelect={onProjectChange} />
+  }
+
   const projectRelations = workspace.projectAttributes.filter((item) => item.projectId === project.id)
-  const addedAttributeIds = new Set(projectRelations.filter((item) => item.status === 'added').map((item) => item.attributeId))
-  const addedCount = addedAttributeIds.size
-  const suggestedCount = projectRelations.filter((item) => item.status === 'suggested').length
+  const relationByAttributeId = new Map(projectRelations.map((item) => [item.attributeId, item]))
+  const projectAttributes = workspace.attributes.filter((attribute) => {
+    const relation = relationByAttributeId.get(attribute.id)
+    if (!relation) return false
+    const filterStatus: Record<Exclude<ProjectFilter, 'all'>, ProjectAttributeStatus> = {
+      active: 'added',
+      unselected: 'suggested',
+      deactivated: 'deactivated',
+    }
+    const matchesFilter = filter === 'all' || relation.status === filterStatus[filter]
+    const haystack = `${attribute.title} ${attribute.category} ${attribute.value}`.toLowerCase()
+    return matchesFilter && haystack.includes(query.toLowerCase())
+  })
+  const rootActive = project.memoryStatus === 'added'
+  const activeCount = rootActive ? projectRelations.filter((item) => item.status === 'added').length : 0
+  const unselectedCount = rootActive ? projectRelations.filter((item) => item.status === 'suggested').length : project.memoryStatus === 'suggested' ? projectRelations.length : 0
+  const deactivatedCount = rootActive ? projectRelations.filter((item) => item.status === 'deactivated').length : project.memoryStatus === 'deactivated' ? projectRelations.length : 0
 
   return (
     <div className="page-content">
       <PageHeader
-        eyebrow="02 / Active project"
+        eyebrow={null}
         title={project.name}
-        description={project.description}
         action={
-          <label className="select-control">
-            <span className="sr-only">Choose project</span>
-            <select value={project.id} onChange={(event) => onProjectChange(event.target.value)}>
-              {workspace.projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-            <Icon name="chevron" size={14} />
-          </label>
+          <div className="project-header-actions">
+            <button className="secondary-button" onClick={() => onProjectChange(null)}>← Projects</button>
+            <label className="select-control">
+              <span className="sr-only">Choose project</span>
+              <select value={project.id} onChange={(event) => onProjectChange(event.target.value)}>
+                {workspace.projects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              <Icon name="chevron" size={14} />
+            </label>
+          </div>
         }
       />
       <div className="project-summary">
-        <span><strong>{addedCount}</strong> in project</span>
-        <span><strong>{suggestedCount}</strong> suggested</span>
+        <span><strong>{activeCount}</strong> active</span>
+        <span><strong>{unselectedCount}</strong> not selected</span>
+        <span><strong>{deactivatedCount}</strong> deactivated</span>
         <span>Updated {formatDate(project.updatedAt)}</span>
       </div>
       <div className="section-intro">
         <div>
-          <h2>Project attributes</h2>
-          <p>Review suggestions and keep only what should shape this project.</p>
+          <h2>Attribute tree</h2>
+          <p>Click a project or attribute circle to change its state. Open a tuple from the right column; use ↻ to change only that tuple.</p>
         </div>
-        <span className="suggestion-label"><Icon name="spark" size={14} />Suggested from your sources</span>
+        <div className="project-tree-legend" aria-label="Project attribute state legend">
+          <span><i className="is-active" />Active</span>
+          <span><i className="is-unselected" />Not selected</span>
+          <span><i className="is-deactivated" />Deactivated</span>
+        </div>
       </div>
-      <div className="category-groups">
-        {Object.entries(groups).map(([category, attributes]) => (
-          <section className="category-group" key={category}>
-            <div className="category-heading"><h3>{category}</h3><span>{attributes.length}</span></div>
-            <AttributeList
-              attributes={attributes}
-              sources={workspace.sources}
-              selectedId={selectedId}
-              onSelect={onSelect}
-              onUpdate={onUpdate}
-              projectMode
-              addedAttributeIds={addedAttributeIds}
-              onAddToProject={(attribute) => onAddToProject(project.id, attribute)}
-            />
-          </section>
-        ))}
+      <div className="toolbar project-memory-toolbar">
+        <label className="search-field">
+          <Icon name="search" size={15} />
+          <input id="project-attribute-search" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Search project attributes" aria-label="Search project attributes" />
+          <kbd>⌘K</kbd>
+        </label>
+        <div className="filter-tabs" aria-label="Project attribute status">
+          {(['all', 'active', 'unselected', 'deactivated'] as const).map((item) => (
+            <button key={item} className={filter === item ? 'active' : ''} onClick={() => onFilterChange(item)}>
+              {item === 'all' ? 'All' : item === 'active' ? 'Active' : item === 'unselected' ? 'Not selected' : 'Deactivated'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <ProjectAttributeTree
+        project={project}
+        attributes={projectAttributes}
+        relations={projectRelations}
+        sources={workspace.sources}
+        onOpenTuple={(attributeId, node) => onOpenTuple({ projectId: project.id, attributeId, node })}
+        onRootStatusChange={(status) => onProjectRootChange(project, status)}
+        onNodeStatusChange={(attribute, node, status) => onProjectStatusChange(project.id, attribute, node, status)}
+      />
+    </div>
+  )
+}
+
+function ProjectPicker({ workspace, onSelect }: { workspace: WorkspaceSnapshot; onSelect: (id: string) => void }) {
+  return (
+    <div className="page-content">
+      <PageHeader eyebrow={null} title="Projects" description="Choose a project first. Its available attributes will open as a left-rooted tree." />
+      <div className="project-picker-head">
+        <span>Choose a project</span>
+        <span>{workspace.projects.length} active</span>
+      </div>
+      <div className="project-picker">
+        {workspace.projects.map((project, index) => {
+          const relations = workspace.projectAttributes.filter((item) => item.projectId === project.id)
+          const activeCount = relations.filter((item) => item.status === 'added').length
+          const unselectedCount = relations.filter((item) => item.status === 'suggested').length
+          return (
+            <button className="project-picker-row" key={project.id} onClick={() => onSelect(project.id)}>
+              <span className="project-index">{String(index + 1).padStart(2, '0')}</span>
+              <span className="project-picker-title"><strong>{project.name}</strong><small>{project.description}</small></span>
+              <span className="project-picker-stat"><strong>{activeCount}</strong> active</span>
+              <span className="project-picker-stat"><strong>{unselectedCount}</strong> not selected</span>
+              <span className="project-picker-date">Updated {formatDate(project.updatedAt)}</span>
+              <Icon name="arrow" size={17} />
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -487,11 +534,10 @@ function SourcesView({ sources, syncing, onSync }: { sources: Source[]; syncing:
   return (
     <div className="page-content">
       <PageHeader
+        eyebrow={null}
         title="Sources"
-        description="Local inputs that contribute evidence to your memory."
         action={<button className="primary-button" onClick={onSync} disabled={syncing}><Icon name="sync" size={15} />{syncing ? 'Syncing…' : 'Sync all'}</button>}
       />
-      <div className="sources-note"><span className="shield-mark">✓</span><div><strong>Source data stays local</strong><p>Index reads from local exports and databases. Nothing is uploaded by this interface.</p></div></div>
       <div className="source-table">
         <div className="source-table-head"><span>Source</span><span>Items</span><span>Last synced</span><span>Status</span><span /></div>
         {sources.map((source) => (
@@ -513,13 +559,98 @@ function SourceGlyph({ kind }: { kind: Source['kind'] }) {
   return <span className={`source-glyph ${kind}`}>{letter}</span>
 }
 
-function Inspector({ attribute, source, projects, allProjects, onClose, onUpdate, onDelete }: {
+function TupleInspector({ attribute, project, relation, source, node, onClose, onUpdate, onNodeStatusChange }: {
+  attribute: Attribute
+  project: Project
+  relation: ProjectAttribute
+  source?: Source
+  node: TupleNode
+  onClose: () => void
+  onUpdate: (attribute: Attribute, patch: AttributePatch, message?: string) => void
+  onNodeStatusChange: (status: ProjectAttributeStatus) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle] = useState(attribute.title)
+  const [category, setCategory] = useState(attribute.category)
+  const [value, setValue] = useState(attribute.value)
+  const [sourceRef, setSourceRef] = useState(attribute.sourceRef)
+  const [confidence, setConfidence] = useState(String(Math.round(attribute.confidence * 100)))
+  const statusField: Record<TupleNode, keyof Pick<ProjectAttribute, 'valueStatus' | 'sourceStatus' | 'confidenceStatus'>> = {
+    value: 'valueStatus',
+    source: 'sourceStatus',
+    confidence: 'confidenceStatus',
+  }
+  const ownStatus = relation[statusField[node]]
+  const inheritedStatus = project.memoryStatus !== 'added'
+    ? project.memoryStatus
+    : relation.status !== 'added'
+      ? relation.status
+      : null
+  const inherited = inheritedStatus !== null
+  const effectiveStatus = inheritedStatus ?? ownStatus
+  const statusLabel: Record<ProjectAttributeStatus, string> = { added: 'Active', suggested: 'Not selected', deactivated: 'Deactivated' }
+
+  const save = () => {
+    const parsedConfidence = Number(confidence)
+    onUpdate(attribute, {
+      title,
+      category,
+      value,
+      sourceRef,
+      confidence: Number.isFinite(parsedConfidence) ? Math.min(Math.max(parsedConfidence, 0), 100) / 100 : attribute.confidence,
+    }, 'Tuple updated')
+    setEditing(false)
+  }
+
+  return (
+    <aside className="inspector tuple-inspector" aria-label={`${node} tuple inspector`}>
+      <div className="inspector-head">
+        <span>Tuple / {node}</span>
+        <button className="icon-button" onClick={onClose} aria-label="Close tuple inspector"><Icon name="close" size={17} /></button>
+      </div>
+      <div className="inspector-body">
+        <div className="tuple-title-line"><span className={`tuple-state ${effectiveStatus}`}>{statusLabel[effectiveStatus]}</span><small>{inherited ? 'Inherited from parent' : 'Own state'}</small></div>
+        <h2>{attribute.title}</h2>
+        <table className="tuple-table">
+          <tbody>
+            <tr><th>project_id</th><td>{project.id}</td></tr>
+            <tr><th>attribute_id</th><td>{attribute.id}</td></tr>
+            <tr><th>node</th><td>{node}</td></tr>
+            <tr><th>title</th><td>{editing ? <input value={title} onChange={(event) => setTitle(event.target.value)} /> : attribute.title}</td></tr>
+            <tr><th>category</th><td>{editing ? <input value={category} onChange={(event) => setCategory(event.target.value)} /> : attribute.category}</td></tr>
+            <tr className={node === 'value' ? 'is-current' : ''}><th>value</th><td>{editing ? <textarea rows={4} value={value} onChange={(event) => setValue(event.target.value)} /> : attribute.value}</td></tr>
+            <tr className={node === 'source' ? 'is-current' : ''}><th>source</th><td>{source?.name ?? 'Unknown source'}</td></tr>
+            <tr><th>source_ref</th><td>{editing ? <textarea rows={3} value={sourceRef} onChange={(event) => setSourceRef(event.target.value)} /> : attribute.sourceRef}</td></tr>
+            <tr className={node === 'confidence' ? 'is-current' : ''}><th>confidence</th><td>{editing ? <div className="confidence-input"><input type="number" min="0" max="100" value={confidence} onChange={(event) => setConfidence(event.target.value)} /><span>%</span></div> : `${Math.round(attribute.confidence * 100)}%`}</td></tr>
+            <tr><th>own_state</th><td>{statusLabel[ownStatus]}</td></tr>
+            <tr><th>effective_state</th><td>{statusLabel[effectiveStatus]}</td></tr>
+          </tbody>
+        </table>
+        <div className="inspector-section">
+          <div className="inspector-label">Tuple state</div>
+          <div className="tuple-state-options">
+            {(['added', 'suggested', 'deactivated'] as const).map((status) => (
+              <button key={status} className={ownStatus === status ? 'active' : ''} disabled={inherited} onClick={() => onNodeStatusChange(status)}>{statusLabel[status]}</button>
+            ))}
+          </div>
+          {inherited && <p className="tuple-inherited-note">Activate the project and attribute nodes before changing this tuple state.</p>}
+        </div>
+      </div>
+      <div className="inspector-foot">
+        {editing ? <><button className="secondary-button" onClick={() => setEditing(false)}>Cancel</button><button className="primary-button" onClick={save}>Save tuple</button></> : <button className="primary-button" onClick={() => setEditing(true)}>Edit tuple</button>}
+      </div>
+    </aside>
+  )
+}
+
+function Inspector({ attribute, source, projects, allProjects, onClose, onUpdate, onProjectStatusChange, onDelete }: {
   attribute: Attribute
   source?: Source
   projects: Project[]
   allProjects: Project[]
   onClose: () => void
   onUpdate: (attribute: Attribute, patch: AttributePatch, message?: string) => void
+  onProjectStatusChange: (projectId: string, status: ProjectAttributeStatus) => void
   onDelete: (attribute: Attribute) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -531,13 +662,6 @@ function Inspector({ attribute, source, projects, allProjects, onClose, onUpdate
   const save = () => {
     onUpdate(attribute, { title, value, category }, 'Attribute updated')
     setEditing(false)
-  }
-
-  const toggleProject = (projectId: string) => {
-    const next = attribute.projectIds.includes(projectId)
-      ? attribute.projectIds.filter((id) => id !== projectId)
-      : [...attribute.projectIds, projectId]
-    onUpdate(attribute, { projectIds: next }, 'Projects updated')
   }
 
   return (
@@ -583,7 +707,7 @@ function Inspector({ attribute, source, projects, allProjects, onClose, onUpdate
           <div className="project-options">
             {allProjects.map((project) => {
               const active = projects.some((item) => item.id === project.id)
-              return <button key={project.id} className={active ? 'active' : ''} onClick={() => toggleProject(project.id)}><span>{active ? '✓' : '+'}</span>{project.name}</button>
+              return <button key={project.id} className={active ? 'active' : ''} onClick={() => onProjectStatusChange(project.id, active ? 'suggested' : 'added')}><span>{active ? '✓' : '+'}</span>{project.name}</button>
             })}
           </div>
         </div>

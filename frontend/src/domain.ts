@@ -1,7 +1,8 @@
 export type SourceKind = 'codex' | 'browser' | 'takeout' | 'manual'
 export type SourceStatus = 'connected' | 'syncing' | 'attention'
 export type AttributeStatus = 'suggested' | 'kept' | 'ignored'
-export type ProjectAttributeStatus = 'suggested' | 'added'
+export type ProjectAttributeStatus = 'suggested' | 'added' | 'deactivated'
+export type ProjectAttributeNode = 'attribute' | 'value' | 'source' | 'confidence'
 
 export interface Source {
   id: string
@@ -21,7 +22,6 @@ export interface Attribute {
   sourceId: string
   confidence: number
   status: AttributeStatus
-  projectIds: string[]
   excerpt: string
   sourceRef: string
   observedAt: string
@@ -33,6 +33,7 @@ export interface Project {
   name: string
   description: string
   status: 'active' | 'archived'
+  memoryStatus: ProjectAttributeStatus
   updatedAt: string
 }
 
@@ -40,6 +41,9 @@ export interface ProjectAttribute {
   projectId: string
   attributeId: string
   status: ProjectAttributeStatus
+  valueStatus: ProjectAttributeStatus
+  sourceStatus: ProjectAttributeStatus
+  confidenceStatus: ProjectAttributeStatus
   suggestedAt: string
 }
 
@@ -54,7 +58,11 @@ export interface AttributePatch {
   title?: string
   value?: string
   category?: string
+  confidence?: number
+  sourceRef?: string
   status?: AttributeStatus
-  projectIds?: string[]
 }
 
+export interface ProjectPatch {
+  memoryStatus?: ProjectAttributeStatus
+}
