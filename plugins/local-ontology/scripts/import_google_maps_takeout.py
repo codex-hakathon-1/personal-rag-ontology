@@ -9,8 +9,10 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import re
 import sqlite3
 from typing import Any
+from urllib.parse import urlparse
 
 from import_records import CandidateEntity, ImportRecord
 
@@ -21,6 +23,10 @@ IMPORT_RECORD_SCHEMA = PLUGIN_ROOT / "schema" / "import_records.sql"
 SUPPORTED_PATH = Path("Takeout") / "Maps (your places)" / "Saved Places.json"
 SOURCE_KIND = "google_maps_takeout"
 FORMAT_NAME = "google_maps_saved_places_geojson_v1"
+RFC_3339_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?"
+    r"(?:Z|[+-]\d{2}:\d{2})$"
+)
 
 
 def _digest(*parts: str) -> str:
@@ -41,7 +47,7 @@ def _initialize_canonical(connection: sqlite3.Connection) -> None:
 
 
 def _timestamp(value: Any) -> str:
-    if not isinstance(value, str) or not value.strip():
+    if not isinstance(value, str) or not RFC_3339_PATTERN.fullmatch(value):
         raise ValueError("properties.Published must be an RFC 3339 timestamp")
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -62,6 +68,21 @@ def _non_empty_string(value: Any, field: str) -> str:
     return value.strip()
 
 
+def _google_maps_url(value: Any) -> str:
+    url = _non_empty_string(value, "properties.Google Maps URL")
+    parsed = urlparse(url)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "www.google.com"
+        or not parsed.path.startswith("/maps/")
+    ):
+        raise ValueError(
+            "properties.Google Maps URL must be an "
+            "https://www.google.com/maps/ URL"
+        )
+    return url
+
+
 def _record_from_feature(
     feature: Any,
     archive_path: str,
@@ -79,10 +100,7 @@ def _record_from_feature(
         location.get("Business Name"),
         "properties.Location.Business Name",
     )
-    source_ref = _non_empty_string(
-        properties.get("Google Maps URL"),
-        "properties.Google Maps URL",
-    )
+    source_ref = _google_maps_url(properties.get("Google Maps URL"))
     occurred_at = _timestamp(properties.get("Published"))
     missing_optional_fields = []
     address = location.get("Address")
@@ -195,42 +213,6 @@ def _upsert_record(
     )
 
 
-def _remove_stale_records(
-    connection: sqlite3.Connection,
-    world_id: str,
-    current_source_refs: set[str],
-) -> None:
-    previous = connection.execute(
-        "SELECT source_ref FROM import_records "
-        "WHERE world_id = ? AND source_kind = ?",
-        (world_id, SOURCE_KIND),
-    ).fetchall()
-    stale_refs = {row[0] for row in previous} - current_source_refs
-    for source_ref in stale_refs:
-        node_id = _identifier("place", world_id, SOURCE_KIND, source_ref)
-        evidence_id = _identifier("evidence", world_id, SOURCE_KIND, source_ref)
-        record_id = _identifier("import-record", world_id, SOURCE_KIND, source_ref)
-        connection.execute("DELETE FROM evidence WHERE evidence_id = ?", (evidence_id,))
-        connection.execute(
-            "DELETE FROM import_records WHERE record_id = ?", (record_id,)
-        )
-        connection.execute(
-            """
-            DELETE FROM nodes
-            WHERE node_id = ?
-              AND NOT EXISTS (
-                SELECT 1 FROM evidence WHERE evidence.node_id = nodes.node_id
-              )
-              AND NOT EXISTS (
-                SELECT 1 FROM edges
-                WHERE edges.from_node_id = nodes.node_id
-                   OR edges.to_node_id = nodes.node_id
-              )
-            """,
-            (node_id,),
-        )
-
-
 def import_google_maps_takeout(
     takeout_path: Path,
     canonical_path: Path,
@@ -258,39 +240,55 @@ def import_google_maps_takeout(
             skipped_paths.append({"path": relative_text, "reason": reason})
 
     records: list[tuple[ImportRecord, str]] = []
+    archive_errors = []
     malformed_records = []
     warnings = []
     imported_files = 0
     if supported_file.is_file():
-        document = json.loads(supported_file.read_text(encoding="utf-8"))
-        if (
-            not isinstance(document, dict)
-            or document.get("type") != "FeatureCollection"
-        ):
-            raise ValueError("Saved Places.json must be a GeoJSON FeatureCollection")
-        features = document.get("features")
-        if not isinstance(features, list):
-            raise ValueError("Saved Places.json features must be an array")
-        imported_files = 1
-        for index, feature in enumerate(features):
-            try:
-                record, summary, missing_optional_fields = _record_from_feature(
-                    feature, archive_path, index
-                )
-            except ValueError as error:
-                malformed_records.append(
-                    {"path": archive_path, "recordIndex": index, "reason": str(error)}
-                )
-                continue
-            records.append((record, summary))
-            if missing_optional_fields:
-                warnings.append(
+        try:
+            document = json.loads(supported_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            archive_errors.append({"path": archive_path, "reason": "invalid_json"})
+        else:
+            if (
+                not isinstance(document, dict)
+                or document.get("type") != "FeatureCollection"
+            ):
+                archive_errors.append(
                     {
                         "path": archive_path,
-                        "recordIndex": index,
-                        "missingOptionalFields": missing_optional_fields,
+                        "reason": "expected_geojson_feature_collection",
                     }
                 )
+            elif not isinstance(document.get("features"), list):
+                archive_errors.append(
+                    {"path": archive_path, "reason": "features_must_be_array"}
+                )
+            else:
+                imported_files = 1
+                for index, feature in enumerate(document["features"]):
+                    try:
+                        record, summary, missing_optional_fields = (
+                            _record_from_feature(feature, archive_path, index)
+                        )
+                    except ValueError as error:
+                        malformed_records.append(
+                            {
+                                "path": archive_path,
+                                "recordIndex": index,
+                                "reason": str(error),
+                            }
+                        )
+                        continue
+                    records.append((record, summary))
+                    if missing_optional_fields:
+                        warnings.append(
+                            {
+                                "path": archive_path,
+                                "recordIndex": index,
+                                "missingOptionalFields": missing_optional_fields,
+                            }
+                        )
     elif takeout_path.exists():
         skipped_paths.append(
             {"path": archive_path, "reason": "supported_archive_path_not_found"}
@@ -312,16 +310,11 @@ def import_google_maps_takeout(
                 """,
                 (world_id, world_id.replace("-", " ").title()),
             )
-            if imported_files:
-                _remove_stale_records(
-                    connection,
-                    world_id,
-                    {record.source_ref for record, _ in records},
-                )
             for record, summary in records:
                 _upsert_record(connection, world_id, record, summary)
 
     return {
+        "archiveErrors": archive_errors,
         "archiveStatus": "supported" if imported_files else "unsupported",
         "format": FORMAT_NAME,
         "importedFiles": imported_files,

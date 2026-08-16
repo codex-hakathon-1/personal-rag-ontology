@@ -114,12 +114,13 @@ The Google Maps importer intentionally supports one legacy Takeout layout only:
 ```
 
 `Saved Places.json` must be a GeoJSON `FeatureCollection`. Each supported feature requires
-`properties.Location.Business Name`, `properties.Google Maps URL`, and an RFC 3339
-`properties.Published` timestamp. `properties.Location.Address` is optional. The distributable
-fixture at `examples/google-maps-takeout-fixture` is the exact supported contract. Google now
-documents saved-list exports under the separate **Saved** Takeout product, so exports with a
-different product name, CSV files, zip files, Timeline data, reviews, and other Maps layouts are
-not accepted as this format. See Google's current
+`properties.Location.Business Name`, an `https://www.google.com/maps/` URL in
+`properties.Google Maps URL`, and an RFC 3339 `properties.Published` timestamp.
+`properties.Location.Address` is optional. The distributable fixture at
+`examples/google-maps-takeout-fixture` is the exact supported contract. Google now documents
+saved-list exports under the separate **Saved** Takeout product, so exports with a different
+product name, CSV files, zip files, Timeline data, reviews, and other Maps layouts are not accepted
+as this format. See Google's current
 [saved-list export instructions](https://support.google.com/maps/answer/7280933) and
 [general Takeout instructions](https://support.google.com/accounts/answer/3024190).
 
@@ -141,14 +142,16 @@ python plugins/local-ontology/scripts/build_session.py `
 Valid features become normalized `import_records`, `place` candidates, nodes, and dated evidence.
 The full source feature remains in `raw_text_or_metadata`; extracted place claims remain separate
 in `candidate_entities` and the graph. The Google Maps URL is the stable `source_ref`, and
-`Published` becomes `occurred_at`. Re-imports update the same stable rows and remove places no
-longer present in the supported file.
+`Published` becomes `occurred_at`. Re-imports update the same stable rows without duplicating them.
+They do not treat an archive as a complete snapshot or delete prior records that are absent or
+malformed in a later import.
 
 The JSON report counts imported files and places. It reports each malformed feature by safe path,
 record index, and reason; reports missing optional addresses as warnings; and classifies every
 other file as `unsupported_archive_path` or `unsupported_takeout_product`. A directory without the
 exact supported path returns `supported_archive_path_not_found` and imports nothing. Reports do
-not include the contents of skipped or malformed records.
+not include the contents of skipped or malformed records. Invalid JSON and unsupported top-level
+GeoJSON shapes return `archiveErrors` in the report rather than being parsed as records.
 
 ## SQL safety boundary
 

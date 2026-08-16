@@ -50,6 +50,32 @@
         },
         "Published": "not-a-timestamp"
       }
+    },
+    {
+      "geometry": {
+        "coordinates": [135.76, 35.01],
+        "type": "Point"
+      },
+      "properties": {
+        "Google Maps URL": "not-a-google-maps-url",
+        "Location": {
+          "Business Name": "Invalid URL fixture"
+        },
+        "Published": "2025-03-14T10:00:00Z"
+      }
+    },
+    {
+      "geometry": {
+        "coordinates": [135.77, 35.02],
+        "type": "Point"
+      },
+      "properties": {
+        "Google Maps URL": "https://www.google.com/maps/place/?q=place_id:fixture-invalid-time",
+        "Location": {
+          "Business Name": "Invalid timestamp fixture"
+        },
+        "Published": "2025-03-14 10:00:00+00:00"
+      }
     }
   ]
 }

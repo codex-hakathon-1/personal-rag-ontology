@@ -3,6 +3,7 @@ import os
 from contextlib import closing
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -45,6 +46,7 @@ class GoogleMapsTakeoutImportTest(unittest.TestCase):
                 ).fetchall()
 
             expected_report = {
+                "archiveErrors": [],
                 "archiveStatus": "supported",
                 "format": "google_maps_saved_places_geojson_v1",
                 "importedFiles": 1,
@@ -57,7 +59,22 @@ class GoogleMapsTakeoutImportTest(unittest.TestCase):
                             "properties.Location.Business Name must be a "
                             "non-empty string"
                         ),
-                    }
+                    },
+                    {
+                        "path": SAVED_PLACES_PATH,
+                        "recordIndex": 3,
+                        "reason": (
+                            "properties.Google Maps URL must be an "
+                            "https://www.google.com/maps/ URL"
+                        ),
+                    },
+                    {
+                        "path": SAVED_PLACES_PATH,
+                        "recordIndex": 4,
+                        "reason": (
+                            "properties.Published must be an RFC 3339 timestamp"
+                        ),
+                    },
                 ],
                 "skippedPaths": [
                     {
@@ -143,6 +160,7 @@ class GoogleMapsTakeoutImportTest(unittest.TestCase):
             report = self._import(takeout_path, root / "canonical.sqlite3")
 
             self.assertEqual(report["archiveStatus"], "unsupported")
+            self.assertEqual(report["archiveErrors"], [])
             self.assertEqual(report["importedFiles"], 0)
             self.assertEqual(report["importedPlaces"], 0)
             self.assertEqual(
@@ -167,6 +185,94 @@ class GoogleMapsTakeoutImportTest(unittest.TestCase):
                     "nodes": 0,
                     "edges": 0,
                     "evidence": 0,
+                },
+            )
+
+    def test_unsupported_saved_places_document_returns_an_import_report(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            takeout_path = root / "archive"
+            saved_places_path = takeout_path / Path(SAVED_PLACES_PATH)
+            saved_places_path.parent.mkdir(parents=True)
+            saved_places_path.write_text(
+                '{"type": "Feature", "properties": {}}\n',
+                encoding="utf-8",
+            )
+
+            report = self._import(takeout_path, root / "canonical.sqlite3")
+
+            self.assertEqual(
+                report,
+                {
+                    "archiveErrors": [
+                        {
+                            "path": SAVED_PLACES_PATH,
+                            "reason": "expected_geojson_feature_collection",
+                        }
+                    ],
+                    "archiveStatus": "unsupported",
+                    "format": "google_maps_saved_places_geojson_v1",
+                    "importedFiles": 0,
+                    "importedPlaces": 0,
+                    "malformedRecords": [],
+                    "skippedPaths": [],
+                    "warnings": [],
+                    "world": "travel",
+                },
+            )
+
+    def test_malformed_reimport_does_not_delete_prior_valid_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            takeout_path = root / "archive"
+            canonical_path = root / "canonical.sqlite3"
+            shutil.copytree(TAKEOUT_FIXTURE, takeout_path)
+            self._import(takeout_path, canonical_path)
+            saved_places_path = takeout_path / Path(SAVED_PLACES_PATH)
+            document = json.loads(saved_places_path.read_text(encoding="utf-8"))
+            del document["features"][0]["properties"]["Location"]["Business Name"]
+            saved_places_path.write_text(
+                json.dumps(document),
+                encoding="utf-8",
+            )
+
+            report = self._import(takeout_path, canonical_path)
+
+            with closing(sqlite3.connect(canonical_path)) as connection:
+                retained = connection.execute(
+                    "SELECT n.canonical_name, e.source_ref "
+                    "FROM nodes AS n JOIN evidence AS e ON e.node_id = n.node_id "
+                    "WHERE n.canonical_name = 'Nishiki Market'"
+                ).fetchall()
+            self.assertEqual(report["importedPlaces"], 1)
+            self.assertEqual(
+                report["malformedRecords"][0],
+                {
+                    "path": SAVED_PLACES_PATH,
+                    "recordIndex": 0,
+                    "reason": (
+                        "properties.Location.Business Name must be a "
+                        "non-empty string"
+                    ),
+                },
+            )
+            self.assertEqual(
+                retained,
+                [
+                    (
+                        "Nishiki Market",
+                        "https://www.google.com/maps/place/"
+                        "?q=place_id:fixture-nishiki",
+                    )
+                ],
+            )
+            self.assertEqual(
+                self._table_counts(canonical_path),
+                {
+                    "import_records": 2,
+                    "nodes": 2,
+                    "edges": 0,
+                    "evidence": 2,
                 },
             )
 
