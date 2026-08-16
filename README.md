@@ -14,6 +14,10 @@
   A local-first personal memory layer that gives AI only the context it is allowed to recall.
 </p>
 
+<p align="center">
+  <a href="https://mesource-local-memory.neo1962.chatgpt.site"><strong>Open the live MeSource frontend</strong></a>
+</p>
+
 ## What is MeSource?
 
 MeSource turns supported local activity sources into a provenance-aware ontology. Raw imports are
