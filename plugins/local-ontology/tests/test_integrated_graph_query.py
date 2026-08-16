@@ -1,5 +1,5 @@
 import json
-from contextlib import closing
+from contextlib import closing, contextmanager
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -16,21 +16,12 @@ BUILD_INTEGRATED_FIXTURE = (
 SCRIPTS = PLUGIN_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from build_session import build_capability_connection
 from mcp_server import handle
 
 
 class IntegratedGraphQueryTest(unittest.TestCase):
     def test_one_fixture_run_builds_a_three_source_capability_database(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            session = self._build_fixture(Path(temporary_directory))
-            capability = build_capability_connection(
-                Path(session["canonicalDatabase"]),
-                session["selectedWorld"],
-                session["policyContract"],
-            )
-            self.addCleanup(capability.close)
-
+        with self._fixture_session() as (session, capability):
             source_kinds = capability.execute(
                 "SELECT DISTINCT source_kind FROM evidence ORDER BY source_kind"
             ).fetchall()
@@ -50,27 +41,34 @@ class IntegratedGraphQueryTest(unittest.TestCase):
             )
             self.assertTrue(set(imported_source_kinds).issubset(source_kinds))
             self.assertEqual(session["selectedWorld"], "travel")
+            self.assertTrue(Path(session["capabilityDatabase"]).is_file())
 
     def test_alias_and_canonical_anchors_return_a_provenanced_two_hop_cycle(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            session = self._build_fixture(Path(temporary_directory))
-            capability = build_capability_connection(
-                Path(session["canonicalDatabase"]),
-                session["selectedWorld"],
-                session["policyContract"],
-            )
-            self.addCleanup(capability.close)
-
+        with self._fixture_session() as (session, capability):
+            cycle_relations = capability.execute(
+                "SELECT e.relation FROM edges AS e "
+                "JOIN nodes AS source ON source.node_id = e.from_node_id "
+                "JOIN nodes AS target ON target.node_id = e.to_node_id "
+                "WHERE (source.canonical_name, target.canonical_name) IN "
+                "(('Nishiki Market', 'Kyoto'), ('Kyoto', 'Nishiki Market')) "
+                "ORDER BY e.relation"
+            ).fetchall()
+            self.assertEqual(cycle_relations, [("includes",), ("related_to",)])
             expectations = {
                 "Kyoto market": [
-                    (0, "Nishiki Market", "google_maps_takeout"),
-                    (1, "Kyoto", "codex_logs"),
-                    (2, "Kyoto itinerary", "browser_history"),
+                    (0, "Nishiki Market", "google_maps_takeout", None),
+                    (1, "Kyoto", "codex_logs", "related_to"),
+                    (
+                        2,
+                        "Kyoto itinerary",
+                        "browser_history",
+                        "researched_with",
+                    ),
                 ],
                 "Kyoto itinerary": [
-                    (0, "Kyoto itinerary", "browser_history"),
-                    (1, "Nishiki Market", "google_maps_takeout"),
-                    (2, "Kyoto", "codex_logs"),
+                    (0, "Kyoto itinerary", "browser_history", None),
+                    (1, "Nishiki Market", "google_maps_takeout", "mentions"),
+                    (2, "Kyoto", "codex_logs", "related_to"),
                 ],
             }
             for anchor, expected in expectations.items():
@@ -78,7 +76,12 @@ class IntegratedGraphQueryTest(unittest.TestCase):
                     rows = self._recursive_query(session, capability, anchor)
                     self.assertTrue(
                         set(expected).issubset({
-                            (row["depth"], row["canonical_name"], row["source_kind"])
+                            (
+                                row["depth"],
+                                row["canonical_name"],
+                                row["node_source_kind"],
+                                row["via_relation"],
+                            )
                             for row in rows
                         }),
                     )
@@ -86,12 +89,24 @@ class IntegratedGraphQueryTest(unittest.TestCase):
                         len({row["node_id"] for row in rows}),
                         len(rows),
                     )
-                    self.assertTrue(all(row["source_ref"] for row in rows))
-                    self.assertTrue(all(row["occurred_at"] for row in rows))
+                    self.assertTrue(all(row["node_source_ref"] for row in rows))
+                    self.assertTrue(all(row["node_occurred_at"] for row in rows))
+                    traversed_rows = [row for row in rows if row["depth"] > 0]
+                    self.assertTrue(
+                        all(row["via_relation"] for row in traversed_rows)
+                    )
+                    self.assertTrue(
+                        all(row["edge_source_kind"] for row in traversed_rows)
+                    )
+                    self.assertTrue(
+                        all(row["edge_source_ref"] for row in traversed_rows)
+                    )
+                    self.assertTrue(
+                        all(row["edge_occurred_at"] for row in traversed_rows)
+                    )
 
     def test_adversarial_read_cannot_recover_physically_omitted_records(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            session = self._build_fixture(Path(temporary_directory))
+        with self._fixture_session() as (session, capability):
             with closing(sqlite3.connect(session["canonicalDatabase"])) as canonical:
                 forbidden_canonical_names = canonical.execute(
                     "SELECT canonical_name FROM nodes "
@@ -106,13 +121,6 @@ class IntegratedGraphQueryTest(unittest.TestCase):
                     ("Forbidden fixture: secret",),
                 ],
             )
-
-            capability = build_capability_connection(
-                Path(session["canonicalDatabase"]),
-                session["selectedWorld"],
-                session["policyContract"],
-            )
-            self.addCleanup(capability.close)
             response = handle(
                 {
                     "jsonrpc": "2.0",
@@ -144,15 +152,7 @@ class IntegratedGraphQueryTest(unittest.TestCase):
             )
 
     def test_unmatched_personal_anchor_returns_no_personal_data(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            session = self._build_fixture(Path(temporary_directory))
-            capability = build_capability_connection(
-                Path(session["canonicalDatabase"]),
-                session["selectedWorld"],
-                session["policyContract"],
-            )
-            self.addCleanup(capability.close)
-
+        with self._fixture_session() as (session, capability):
             rows = self._recursive_query(
                 session,
                 capability,
@@ -162,15 +162,7 @@ class IntegratedGraphQueryTest(unittest.TestCase):
             self.assertEqual(rows, [])
 
     def test_guidance_supports_no_query_and_explains_bounded_traversal(self):
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            session = self._build_fixture(Path(temporary_directory))
-            capability = build_capability_connection(
-                Path(session["canonicalDatabase"]),
-                session["selectedWorld"],
-                session["policyContract"],
-            )
-            self.addCleanup(capability.close)
-
+        with self._fixture_session() as (session, capability):
             response = handle(
                 {
                     "jsonrpc": "2.0",
@@ -216,8 +208,21 @@ class IntegratedGraphQueryTest(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        session_path = Path(json.loads(result.stdout)["sessionPath"])
-        return json.loads(session_path.read_text(encoding="utf-8"))
+        fixture = json.loads(result.stdout)
+        session_path = Path(fixture["sessionPath"])
+        session = json.loads(session_path.read_text(encoding="utf-8"))
+        session["capabilityDatabase"] = fixture["capabilityDatabase"]
+        return session
+
+    @classmethod
+    @contextmanager
+    def _fixture_session(cls):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            session = cls._build_fixture(Path(temporary_directory))
+            with closing(
+                sqlite3.connect(session["capabilityDatabase"])
+            ) as capability:
+                yield session, capability
 
     @staticmethod
     def _recursive_query(
@@ -234,15 +239,16 @@ class IntegratedGraphQueryTest(unittest.TestCase):
               WHERE lower(n.canonical_name) = lower('{anchor}')
                  OR lower(a.alias) = lower('{anchor}')
             ),
-            neighborhood(node_id, depth, path) AS (
-              SELECT node_id, 0, '|' || node_id || '|'
+            neighborhood(node_id, depth, path, via_edge_id) AS (
+              SELECT node_id, 0, '|' || node_id || '|', NULL
               FROM anchors
 
               UNION ALL
 
               SELECT e.to_node_id,
                      neighborhood.depth + 1,
-                     neighborhood.path || e.to_node_id || '|'
+                     neighborhood.path || e.to_node_id || '|',
+                     e.edge_id
               FROM neighborhood
               JOIN edges AS e ON e.from_node_id = neighborhood.node_id
               WHERE neighborhood.depth < 2
@@ -256,19 +262,35 @@ class IntegratedGraphQueryTest(unittest.TestCase):
                    neighborhood.depth,
                    n.type AS node_type,
                    n.canonical_name,
-                   v.source_kind,
-                   v.source_ref,
-                   v.occurred_at
+                   node_evidence.source_kind AS node_source_kind,
+                   node_evidence.source_ref AS node_source_ref,
+                   node_evidence.occurred_at AS node_occurred_at,
+                   traversed.relation AS via_relation,
+                   edge_evidence.source_kind AS edge_source_kind,
+                   edge_evidence.source_ref AS edge_source_ref,
+                   edge_evidence.occurred_at AS edge_occurred_at
             FROM neighborhood
             JOIN nodes AS n ON n.node_id = neighborhood.node_id
-            JOIN evidence AS v ON v.evidence_id = (
+            JOIN evidence AS node_evidence ON node_evidence.evidence_id = (
               SELECT candidate.evidence_id
               FROM evidence AS candidate
               WHERE candidate.node_id = n.node_id
               ORDER BY candidate.occurred_at DESC, candidate.evidence_id
               LIMIT 1
             )
-            ORDER BY neighborhood.depth, n.canonical_name, v.source_ref
+            LEFT JOIN edges AS traversed
+              ON traversed.edge_id = neighborhood.via_edge_id
+            LEFT JOIN evidence AS edge_evidence
+              ON edge_evidence.evidence_id = (
+                SELECT candidate.evidence_id
+                FROM evidence AS candidate
+                WHERE candidate.edge_id = traversed.edge_id
+                ORDER BY candidate.occurred_at DESC, candidate.evidence_id
+                LIMIT 1
+              )
+            ORDER BY neighborhood.depth,
+                     n.canonical_name,
+                     node_evidence.source_ref
         """
         response = handle(
             {

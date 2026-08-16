@@ -56,6 +56,21 @@
         "type": "topic",
         "canonicalName": "Kyoto"
       },
+      "relation": "includes",
+      "to": {
+        "type": "place",
+        "canonicalName": "Nishiki Market"
+      },
+      "confidence": 1.0,
+      "occurredAt": "2025-03-18T09:30:00Z",
+      "sourceRef": "fixture://integrated/graph-overlay.json#topic-to-place",
+      "excerpt": "The two-edge fixture cycle verifies that traversals do not revisit their anchor."
+    },
+    {
+      "from": {
+        "type": "topic",
+        "canonicalName": "Kyoto"
+      },
       "relation": "researched_with",
       "to": {
         "type": "web_page",

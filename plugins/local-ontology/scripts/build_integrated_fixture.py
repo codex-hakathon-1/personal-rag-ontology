@@ -12,7 +12,11 @@ import sqlite3
 import tempfile
 from typing import Any
 
-from build_session import CanonicalSource, build_session
+from build_session import (
+    CanonicalSource,
+    build_capability_connection,
+    build_session,
+)
 from import_browser_history import import_chromium_history
 from import_codex_logs import import_codex_logs
 from import_google_maps_takeout import import_google_maps_takeout
@@ -26,6 +30,7 @@ CODEX_FIXTURE = EXAMPLES / "integrated-fixture" / "codex-logs"
 TAKEOUT_FIXTURE = EXAMPLES / "google-maps-takeout-fixture"
 POLICY = EXAMPLES / "integrated-policy.example.json"
 GRAPH_OVERLAY = EXAMPLES / "integrated-fixture" / "graph-overlay.json"
+WORLD_ID = "travel"
 
 
 def _identifier(kind: str, *parts: str) -> str:
@@ -51,6 +56,41 @@ def _selected_node_id(
     return rows[0][0]
 
 
+def _insert_fixture_evidence(
+    connection: sqlite3.Connection,
+    *,
+    node_id: str | None = None,
+    edge_id: str | None = None,
+    source_ref: str,
+    occurred_at: str,
+    excerpt: str,
+    content: dict[str, Any],
+) -> None:
+    owner_id = node_id or edge_id
+    if owner_id is None or (node_id is not None and edge_id is not None):
+        raise ValueError("Fixture evidence must belong to one node or one edge")
+    connection.execute(
+        """
+        INSERT INTO evidence (
+          evidence_id, node_id, edge_id, source_kind, source_ref,
+          occurred_at, observed_at, excerpt, content_hash
+        ) VALUES (?, ?, ?, 'fixture_graph', ?, ?, ?, ?, ?)
+        """,
+        (
+            _identifier("fixture-evidence", owner_id),
+            node_id,
+            edge_id,
+            source_ref,
+            occurred_at,
+            occurred_at,
+            excerpt,
+            hashlib.sha256(
+                json.dumps(content, sort_keys=True).encode("utf-8")
+            ).hexdigest(),
+        ),
+    )
+
+
 def _apply_graph_overlay(canonical_path: Path, world_id: str) -> None:
     overlay = json.loads(GRAPH_OVERLAY.read_text(encoding="utf-8"))
     with closing(sqlite3.connect(canonical_path)) as connection:
@@ -67,7 +107,6 @@ def _apply_graph_overlay(canonical_path: Path, world_id: str) -> None:
                 node_id = _identifier(
                     "fixture-node", node_world, node["canonicalName"]
                 )
-                evidence_id = _identifier("fixture-evidence", node_id)
                 connection.execute(
                     """
                     INSERT INTO nodes (
@@ -89,24 +128,13 @@ def _apply_graph_overlay(canonical_path: Path, world_id: str) -> None:
                         node["occurredAt"],
                     ),
                 )
-                connection.execute(
-                    """
-                    INSERT INTO evidence (
-                      evidence_id, node_id, edge_id, source_kind, source_ref,
-                      occurred_at, observed_at, excerpt, content_hash
-                    ) VALUES (?, ?, NULL, 'fixture_graph', ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        evidence_id,
-                        node_id,
-                        node["sourceRef"],
-                        node["occurredAt"],
-                        node["occurredAt"],
-                        node["canonicalName"],
-                        hashlib.sha256(
-                            json.dumps(node, sort_keys=True).encode("utf-8")
-                        ).hexdigest(),
-                    ),
+                _insert_fixture_evidence(
+                    connection,
+                    node_id=node_id,
+                    source_ref=node["sourceRef"],
+                    occurred_at=node["occurredAt"],
+                    excerpt=node["canonicalName"],
+                    content=node,
                 )
             for alias in overlay["aliases"]:
                 node_id = _selected_node_id(connection, world_id, alias["node"])
@@ -129,7 +157,6 @@ def _apply_graph_overlay(canonical_path: Path, world_id: str) -> None:
                     edge["relation"],
                     to_node_id,
                 )
-                evidence_id = _identifier("fixture-evidence", edge_id)
                 connection.execute(
                     """
                     INSERT INTO edges (
@@ -150,32 +177,20 @@ def _apply_graph_overlay(canonical_path: Path, world_id: str) -> None:
                         edge["occurredAt"],
                     ),
                 )
-                connection.execute(
-                    """
-                    INSERT INTO evidence (
-                      evidence_id, node_id, edge_id, source_kind, source_ref,
-                      occurred_at, observed_at, excerpt, content_hash
-                    ) VALUES (?, NULL, ?, 'fixture_graph', ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        evidence_id,
-                        edge_id,
-                        edge["sourceRef"],
-                        edge["occurredAt"],
-                        edge["occurredAt"],
-                        edge["excerpt"],
-                        hashlib.sha256(
-                            json.dumps(edge, sort_keys=True).encode("utf-8")
-                        ).hexdigest(),
-                    ),
+                _insert_fixture_evidence(
+                    connection,
+                    edge_id=edge_id,
+                    source_ref=edge["sourceRef"],
+                    occurred_at=edge["occurredAt"],
+                    excerpt=edge["excerpt"],
+                    content=edge,
                 )
 
 
 def build_integrated_fixture(
     session_directory: Path,
-    world_id: str = "travel",
 ) -> dict[str, Any]:
-    """Import all supported fixture sources and build one capability session."""
+    """Import all fixture sources and persist the selected-world capability."""
 
     session_directory = session_directory.resolve()
     session_directory.mkdir(parents=True, exist_ok=True)
@@ -193,32 +208,47 @@ def build_integrated_fixture(
             "browserHistory": import_chromium_history(
                 history_path,
                 canonical_path,
-                world_id,
+                WORLD_ID,
                 CHROMIUM_PATTERNS,
             ),
             "codexLogs": import_codex_logs(
                 CODEX_FIXTURE,
                 canonical_path,
-                world_id,
+                WORLD_ID,
             ),
             "googleMapsTakeout": import_google_maps_takeout(
                 TAKEOUT_FIXTURE,
                 canonical_path,
-                world_id,
+                WORLD_ID,
             ),
         }
-        _apply_graph_overlay(canonical_path, world_id)
+        _apply_graph_overlay(canonical_path, WORLD_ID)
 
     session_path = build_session(
         CanonicalSource(canonical_path),
         POLICY,
-        world_id,
+        WORLD_ID,
         session_directory,
     )
+    session = json.loads(session_path.read_text(encoding="utf-8"))
+    capability_path = session_directory / "capability.sqlite3"
+    capability_path.unlink(missing_ok=True)
+    with (
+        closing(
+            build_capability_connection(
+                canonical_path,
+                session["selectedWorld"],
+                session["policyContract"],
+            )
+        ) as capability,
+        closing(sqlite3.connect(capability_path)) as persisted_capability,
+    ):
+        capability.backup(persisted_capability)
     return {
+        "capabilityDatabase": str(capability_path),
         "canonicalDatabase": str(canonical_path),
         "reports": reports,
-        "selectedWorld": world_id,
+        "selectedWorld": WORLD_ID,
         "sessionPath": str(session_path),
     }
 
@@ -226,11 +256,10 @@ def build_integrated_fixture(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--session-dir", type=Path, required=True)
-    parser.add_argument("--world", default="travel")
     arguments = parser.parse_args()
     print(
         json.dumps(
-            build_integrated_fixture(arguments.session_dir, arguments.world),
+            build_integrated_fixture(arguments.session_dir),
             sort_keys=True,
         )
     )

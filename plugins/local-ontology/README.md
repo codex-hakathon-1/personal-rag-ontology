@@ -49,13 +49,15 @@ python plugins/local-ontology/scripts/build_integrated_fixture.py `
   --session-dir .local-ontology-integrated-session
 ```
 
-The run prints its importer reports and `sessionPath` as JSON. The fixture's explicit
-`graph-overlay.json` adds one alias and a small, cyclic set of cross-source edges so recursive SQL
-can exercise canonical-name matching, alias matching, a two-hop bound, and a path-based cycle
-guard. The overlay also adds wrong-world, dormant, and secret markers to the canonical database;
-the integrated policy physically omits those markers from the capability database. Overlay-only
-links use `fixture_graph` provenance so they cannot be mistaken for claims extracted from the
-three supported source formats.
+The run prints its importer reports, `sessionPath`, and `capabilityDatabase` as JSON. It persists
+the selected-world capability database beside the session so the one command completes both the
+imports and policy materialization. The fixture's explicit `graph-overlay.json` adds one alias and
+a small set of cross-source edges, including a two-edge cycle, so recursive SQL can exercise
+canonical-name matching, alias matching, a two-hop bound, and a path-based cycle guard. The
+overlay also adds wrong-world, dormant, and secret markers to the canonical database; the
+integrated policy physically omits those markers from the capability database. Overlay-only links
+use `fixture_graph` provenance so they cannot be mistaken for claims extracted from the three
+supported source formats.
 
 ## Import Chromium history
 
