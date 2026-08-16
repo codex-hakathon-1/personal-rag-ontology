@@ -41,6 +41,12 @@ class QueryBoundaryTest(unittest.TestCase):
     def test_query_cannot_execute_without_an_audit_context(self):
         with self.assertRaisesRegex(TypeError, "audit_context"):
             query(self.connection, "SELECT value FROM memories")
+        with self.assertRaisesRegex(TypeError, "audit_context"):
+            query(
+                self.connection,
+                "SELECT value FROM memories",
+                audit_context=None,
+            )
 
     def test_system_objects_are_rejected(self):
         with self.assertRaisesRegex(QueryRejected, "prohibited database object"):
@@ -51,7 +57,7 @@ class QueryBoundaryTest(unittest.TestCase):
         self.connection.execute("CREATE TABLE canonical.secrets (value TEXT)")
         self.connection.execute("INSERT INTO canonical.secrets VALUES ('forbidden')")
 
-        with self.assertRaisesRegex(QueryRejected, "prohibited database object"):
+        with self.assertRaises(QueryRejected):
             self.run_query("SELECT value FROM canonical.secrets")
 
     def test_mutations_are_rejected_even_on_a_writable_connection(self):
@@ -178,15 +184,16 @@ class QueryBoundaryTest(unittest.TestCase):
 
         self.assertLess(time.monotonic() - started, 1)
 
-    def test_execution_time_limit_rejects_one_slow_sqlite_function(self):
-        self.connection.create_function(
-            "slow_value",
-            0,
-            lambda: time.sleep(0.02) or 1,
-        )
+    def test_execution_time_limit_terminates_one_slow_sqlite_function(self):
+        started = time.monotonic()
 
         with self.assertRaisesRegex(QueryRejected, "execution time limit"):
-            self.run_query("SELECT slow_value()", max_execution_ms=1)
+            self.run_query(
+                "SELECT length(hex(randomblob(100000000)))",
+                max_execution_ms=20,
+            )
+
+        self.assertLess(time.monotonic() - started, 0.2)
 
     def test_every_attempt_writes_a_payload_free_audit_entry(self):
         with tempfile.TemporaryDirectory() as temporary_directory:

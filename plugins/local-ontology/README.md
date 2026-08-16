@@ -45,7 +45,8 @@ The query harness accepts one `SELECT` or `WITH` statement, including recursive 
 the in-memory capability database. A SQLite authorizer rejects writes, schema changes,
 transactions, database attachment, PRAGMAs, extension and file functions, temporary objects,
 system objects, and reads from any attached database. A progress handler interrupts queries
-that exceed `--max-execution-ms`; `--max-rows` bounds returned rows and the response reports
+that exceed `--max-execution-ms`, and the query runs in an isolated worker process that is
+terminated at the same deadline; `--max-rows` bounds returned rows and the response reports
 whether it was truncated.
 
 Each session writes `query-audit-<session-id>.jsonl` beside `session.json`. Every successful or

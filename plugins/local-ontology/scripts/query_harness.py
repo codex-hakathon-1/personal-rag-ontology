@@ -6,6 +6,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import multiprocessing
+from multiprocessing.connection import Connection
 from pathlib import Path
 import re
 import sqlite3
@@ -173,6 +175,109 @@ def _execute_query(
         connection.row_factory = previous_row_factory
 
 
+def _query_worker(
+    serialized_database: bytes,
+    sql: str,
+    max_rows: int,
+    max_execution_ms: int,
+    result_pipe: Connection,
+) -> None:
+    connection = sqlite3.connect(":memory:")
+    try:
+        connection.deserialize(serialized_database)
+        connection.execute("PRAGMA query_only = ON")
+        try:
+            result = _execute_query(
+                connection,
+                sql,
+                max_rows,
+                max_execution_ms,
+            )
+            result_pipe.send(("succeeded", result))
+        except QueryRejected as error:
+            result_pipe.send(("rejected", str(error)))
+        except Exception as error:
+            result_pipe.send(("failed", str(error)))
+    finally:
+        result_pipe.close()
+        connection.close()
+
+
+def _terminate(process: multiprocessing.Process) -> None:
+    if process.is_alive():
+        process.terminate()
+    process.join(timeout=1)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=1)
+
+
+def _execute_isolated(
+    connection: sqlite3.Connection,
+    sql: str,
+    max_rows: int,
+    max_execution_ms: int,
+) -> dict[str, Any]:
+    if not isinstance(sql, str):
+        raise QueryRejected("SQL must be a string")
+    if not isinstance(max_rows, int) or isinstance(max_rows, bool) or max_rows <= 0:
+        raise QueryRejected("Row limit must be a positive integer")
+    if (
+        not isinstance(max_execution_ms, int)
+        or isinstance(max_execution_ms, bool)
+        or max_execution_ms <= 0
+    ):
+        raise QueryRejected("Execution time limit must be a positive integer")
+
+    try:
+        serialized_database = connection.serialize()
+    except sqlite3.Error as error:
+        raise QueryRejected("The capability database could not be isolated") from error
+
+    process_context = multiprocessing.get_context("spawn")
+    receive_pipe, send_pipe = process_context.Pipe(duplex=False)
+    process = process_context.Process(
+        target=_query_worker,
+        args=(
+            serialized_database,
+            sql,
+            max_rows,
+            max_execution_ms,
+            send_pipe,
+        ),
+        daemon=True,
+    )
+    deadline = time.monotonic() + (max_execution_ms / 1_000)
+    try:
+        process.start()
+        send_pipe.close()
+        remaining_seconds = max(0.0, deadline - time.monotonic())
+        if not receive_pipe.poll(remaining_seconds):
+            _terminate(process)
+            raise QueryRejected(
+                f"Query exceeded the {max_execution_ms} ms execution time limit"
+            )
+        try:
+            status, payload = receive_pipe.recv()
+        except EOFError as error:
+            raise QueryRejected("The isolated query worker exited unexpectedly") from error
+        if time.monotonic() >= deadline:
+            _terminate(process)
+            raise QueryRejected(
+                f"Query exceeded the {max_execution_ms} ms execution time limit"
+            )
+        process.join(timeout=1)
+    finally:
+        receive_pipe.close()
+        send_pipe.close()
+        if process.is_alive():
+            _terminate(process)
+
+    if status == "succeeded":
+        return payload
+    raise QueryRejected(str(payload))
+
+
 def query(
     connection: sqlite3.Connection,
     sql: str,
@@ -183,12 +288,15 @@ def query(
 ) -> dict[str, Any]:
     """Run one bounded read-only statement and record the attempt."""
 
+    if not isinstance(audit_context, QueryAuditContext):
+        raise TypeError("audit_context must be a QueryAuditContext")
+
     started = time.monotonic()
     row_count = 0
     truncated = False
     outcome: AuditOutcome = "failed"
     try:
-        result = _execute_query(connection, sql, max_rows, max_execution_ms)
+        result = _execute_isolated(connection, sql, max_rows, max_execution_ms)
         row_count = result["rowCount"]
         truncated = result["truncated"]
         outcome = "succeeded"
