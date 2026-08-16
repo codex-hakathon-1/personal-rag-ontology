@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a canonical fixture graph and a selected-world capability database."""
+"""Configure a session for one policy-bounded capability database."""
 
 from __future__ import annotations
 
@@ -91,20 +91,32 @@ def build_capability_connection(
 
     included_states = set(policy.get("include_states", ["active"]))
     denied_sensitivity = set(policy.get("deny_sensitivity", []))
-    allowed_types = set(policy.get("allow_node_types", []))
-    included_sources = set(policy.get("include_sources", []))
+    allowed_types = (
+        set(policy["allow_node_types"])
+        if "allow_node_types" in policy
+        else None
+    )
+    included_sources = (
+        set(policy["include_sources"])
+        if "include_sources" in policy
+        else None
+    )
 
     eligible_evidence = [
         row for row in canonical_rows["evidence"]
-        if not included_sources or row["source_kind"] in included_sources
+        if included_sources is None or row["source_kind"] in included_sources
     ]
     evidenced_nodes = {row["node_id"] for row in eligible_evidence if row.get("node_id")}
+    evidenced_edges = {row["edge_id"] for row in eligible_evidence if row.get("edge_id")}
+    edges_with_evidence = {
+        row["edge_id"] for row in canonical_rows["evidence"] if row.get("edge_id")
+    }
     nodes = [
         row for row in canonical_rows["nodes"]
         if row["world_id"] == selected_world
         and row["state"] in included_states
         and row["sensitivity"] not in denied_sensitivity
-        and (not allowed_types or row["type"] in allowed_types)
+        and (allowed_types is None or row["type"] in allowed_types)
         and row["node_id"] in evidenced_nodes
     ]
     node_ids = {row["node_id"] for row in nodes}
@@ -117,6 +129,10 @@ def build_capability_connection(
         and row["state"] in included_states
         and row["from_node_id"] in node_ids
         and row["to_node_id"] in node_ids
+        and (
+            row["edge_id"] in evidenced_edges
+            or row["edge_id"] not in edges_with_evidence
+        )
     ]
     edge_ids = {row["edge_id"] for row in edges}
     evidence = [

@@ -154,6 +154,32 @@ exact supported path returns `supported_archive_path_not_found` and imports noth
 not include the contents of skipped or malformed records. Invalid JSON and unsupported top-level
 GeoJSON shapes return `archiveErrors` in the report rather than being parsed as records.
 
+## Rebuild lifecycle state and apply world policy
+
+Lifecycle state is materialized in the canonical graph before a session reads it. Run the rebuild
+with an explicit clock so the same graph, rules, and `--as-of` value always produce the same result:
+
+```powershell
+python plugins/local-ontology/scripts/rebuild_state.py `
+  --canonical .local-ontology\canonical.sqlite3 `
+  --rules plugins/local-ontology/examples/state-rules.example.json `
+  --as-of 2026-08-16T00:00:00Z
+```
+
+`dormant_after_days` maps node types to inactivity thresholds measured from `last_seen_at`. The
+rebuild moves configured non-superseded types between `active` and `dormant`. It materializes
+`superseded` only when an active `supersedes` edge has stored evidence, choosing the newest explicit
+replacement deterministically when more than one exists. A newer fact without that evidence never
+replaces an older fact. Re-running unchanged input makes no further changes.
+
+`build_session.py` requires one configured `--world`; the SQL tool has no world-selection input and
+the capability schema has no `worlds` table. At MCP startup the capability builder copies only nodes
+in that world which have an included evidence source, included state, allowed type, and sensitivity
+outside `deny_sensitivity`. It then copies aliases for those nodes, edges whose endpoints remain and
+whose evidence (when present) includes an allowed source, and only the surviving evidence. Denied
+and other-world records are physically absent. Missing `include_sources` or `allow_node_types` keys
+are unrestricted; an explicitly empty allowlist includes nothing.
+
 ## SQL safety boundary
 
 The query harness accepts one `SELECT` or `WITH` statement, including recursive CTEs, against

@@ -8,7 +8,7 @@
     "travel": {
       "include_sources": ["codex_logs"],
       "allow_node_types": ["plan", "place"],
-      "include_states": ["active"],
+      "include_states": ["active", "dormant", "superseded"],
       "deny_sensitivity": ["secret", "identity"]
     }
   }
