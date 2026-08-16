@@ -113,5 +113,11 @@ See MeSource in motion—from local source discovery to project memory curation�
 film.
 
 <p align="center">
-  <a href="./frontend/public/media/mesource-demo.mp4"><strong>▶ Watch the MeSource product demo (MP4)</strong></a>
+  <a href="./frontend/public/media/mesource-demo.mp4">
+    <img src="./docs/assets/mesource-demo.gif" width="720" alt="MeSource product demo" />
+  </a>
+</p>
+
+<p align="center">
+  <a href="./frontend/public/media/mesource-demo.mp4">Watch the HD demo with sound (MP4)</a>
 </p>
