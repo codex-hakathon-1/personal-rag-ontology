@@ -1,0 +1,125 @@
+.jelly-pet {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 8;
+  width: 108px;
+  height: 100px;
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  will-change: transform;
+}
+
+.jelly-pet:hover .jelly-pet__shape {
+  filter: drop-shadow(0 0 9px rgb(217 255 82 / 38%));
+}
+
+.jelly-pet:focus-visible {
+  outline: none;
+}
+
+.jelly-pet.is-keyboard-mode:focus {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.jelly-pet.is-dragging {
+  cursor: grabbing;
+}
+
+.jelly-pet svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  -webkit-user-drag: none;
+}
+
+.jelly-pet__shadow {
+  fill: rgb(17 18 16 / 16%);
+  filter: blur(3px);
+  transform-origin: center;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.jelly-pet.is-dragging .jelly-pet__shadow {
+  opacity: .08;
+  transform: scale(.76);
+}
+
+.jelly-pet__body {
+  transform-box: fill-box;
+  transform-origin: 50% 84%;
+  transform: rotate(var(--jelly-rotation)) scale(var(--jelly-stretch-x), var(--jelly-stretch-y));
+  will-change: transform;
+}
+
+.jelly-pet__body.is-idle {
+  animation: jelly-idle 3.8s ease-in-out infinite;
+}
+
+.jelly-pet__body.is-settling {
+  animation: jelly-settle 620ms cubic-bezier(.2, .75, .22, 1);
+}
+
+.jelly-pet__shape {
+  fill: #d9ff52;
+  filter: drop-shadow(0 5px 6px rgb(17 18 16 / 17%));
+  transition: filter 180ms ease;
+}
+
+.jelly-pet__face {
+  fill: #efffae;
+  opacity: .42;
+}
+
+.jelly-pet__shine {
+  fill: #fff;
+  opacity: .28;
+}
+
+.jelly-pet__eye {
+  fill: #111210;
+  opacity: .78;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.jelly-pet__eye.is-blinking {
+  animation: jelly-blink 220ms ease-in-out;
+}
+
+@keyframes jelly-idle {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  45% { transform: translateY(-2px) scale(.985, 1.025); }
+  55% { transform: translateY(-2px) scale(.985, 1.025); }
+}
+
+@keyframes jelly-settle {
+  0% { transform: scale(1.08, .91); }
+  26% { transform: scale(.94, 1.08) translateY(-2px); }
+  52% { transform: scale(1.035, .97); }
+  74% { transform: scale(.985, 1.015); }
+  100% { transform: scale(1, 1); }
+}
+
+@keyframes jelly-blink {
+  0%, 100% { transform: scaleY(1); }
+  45%, 60% { transform: scaleY(.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jelly-pet__body.is-idle,
+  .jelly-pet__body.is-settling,
+  .jelly-pet__eye.is-blinking {
+    animation: none;
+  }
+}

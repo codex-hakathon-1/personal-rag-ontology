@@ -24,7 +24,8 @@ The REST client currently expects:
 - `GET /workspace`
 - `PATCH /attributes/:attributeId`
 - `DELETE /attributes/:attributeId`
-- `PATCH /projects/:projectId/attributes/:attributeId`
+- `PATCH /projects/:projectId` with `{ memoryStatus }`
+- `PATCH /projects/:projectId/attributes/:attributeId` with `{ node, status }`
 - `POST /sources/sync`
 
 Use `npm run lint` and `npm run build` before shipping changes.

@@ -1,10 +1,11 @@
-import type { Attribute, AttributePatch, ProjectAttribute, ProjectAttributeStatus, Source, WorkspaceSnapshot } from '../domain'
+import type { Attribute, AttributePatch, Project, ProjectAttribute, ProjectAttributeNode, ProjectAttributeStatus, ProjectPatch, Source, WorkspaceSnapshot } from '../domain'
 import { createDemoApi } from './demo'
 
 export interface OntologyApi {
   getWorkspace(): Promise<WorkspaceSnapshot>
   updateAttribute(id: string, patch: AttributePatch): Promise<Attribute>
-  updateProjectAttribute(projectId: string, attributeId: string, status: ProjectAttributeStatus): Promise<ProjectAttribute>
+  updateProject(projectId: string, patch: ProjectPatch): Promise<Project>
+  updateProjectAttributeNode(projectId: string, attributeId: string, node: ProjectAttributeNode, status: ProjectAttributeStatus): Promise<ProjectAttribute>
   deleteAttribute(id: string): Promise<void>
   syncSources(): Promise<Source[]>
 }
@@ -37,10 +38,17 @@ class RestOntologyApi implements OntologyApi {
     })
   }
 
-  updateProjectAttribute(projectId: string, attributeId: string, status: ProjectAttributeStatus) {
+  updateProject(projectId: string, patch: ProjectPatch) {
+    return this.request<Project>(`/projects/${projectId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(patch),
+    })
+  }
+
+  updateProjectAttributeNode(projectId: string, attributeId: string, node: ProjectAttributeNode, status: ProjectAttributeStatus) {
     return this.request<ProjectAttribute>(`/projects/${projectId}/attributes/${attributeId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ node, status }),
     })
   }
 
