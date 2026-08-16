@@ -23,12 +23,25 @@ class ImportRecord:
     candidate_entities: tuple[CandidateEntity, ...]
     provenance: Mapping[str, Any]
 
-    def content_hash(self) -> str:
-        document = asdict(self)
-        encoded = json.dumps(
-            document,
+    @staticmethod
+    def _json(value: Any) -> str:
+        return json.dumps(
+            value,
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
-        ).encode("utf-8")
+        )
+
+    def raw_metadata_json(self) -> str:
+        return self._json(self.raw_text_or_metadata)
+
+    def candidate_entities_json(self) -> str:
+        return self._json([asdict(entity) for entity in self.candidate_entities])
+
+    def provenance_json(self) -> str:
+        return self._json(self.provenance)
+
+    def content_hash(self) -> str:
+        document = asdict(self)
+        encoded = self._json(document).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()

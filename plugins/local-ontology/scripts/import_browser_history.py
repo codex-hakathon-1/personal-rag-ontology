@@ -24,6 +24,7 @@ from import_records import CandidateEntity, ImportRecord
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_SCHEMA = PLUGIN_ROOT / "schema" / "canonical.sql"
 BROWSER_RECORD_SCHEMA = PLUGIN_ROOT / "schema" / "browser_history.sql"
+IMPORT_RECORD_SCHEMA = PLUGIN_ROOT / "schema" / "import_records.sql"
 CHROMIUM_EPOCH = datetime(1601, 1, 1, tzinfo=timezone.utc)
 
 
@@ -82,6 +83,27 @@ class NodeCandidate:
     last_seen_at: str
     created_at: str
     updated_at: str
+
+
+@dataclass(frozen=True)
+class NodeEvidenceTarget:
+    node_id: str
+
+
+@dataclass(frozen=True)
+class EdgeEvidenceTarget:
+    edge_id: str
+
+
+EvidenceTarget = NodeEvidenceTarget | EdgeEvidenceTarget
+
+
+@dataclass(frozen=True)
+class EvidenceCandidate:
+    evidence_id: str
+    target: EvidenceTarget
+    record: ImportRecord
+    excerpt: str
 
 
 def _digest(*parts: str) -> str:
@@ -167,6 +189,7 @@ def _initialize_canonical(connection: sqlite3.Connection) -> None:
     if not exists:
         connection.executescript(CANONICAL_SCHEMA.read_text(encoding="utf-8"))
     connection.executescript(BROWSER_RECORD_SCHEMA.read_text(encoding="utf-8"))
+    connection.executescript(IMPORT_RECORD_SCHEMA.read_text(encoding="utf-8"))
 
 
 def _upsert_node(connection: sqlite3.Connection, node: NodeCandidate) -> None:
@@ -200,14 +223,18 @@ def _upsert_node(connection: sqlite3.Connection, node: NodeCandidate) -> None:
 
 def _upsert_evidence(
     connection: sqlite3.Connection,
-    evidence_id: str,
-    node_id: str | None,
-    edge_id: str | None,
-    source_ref: str,
-    occurred_at: str,
-    excerpt: str,
-    content_hash: str,
+    evidence: EvidenceCandidate,
 ) -> None:
+    node_id = (
+        evidence.target.node_id
+        if isinstance(evidence.target, NodeEvidenceTarget)
+        else None
+    )
+    edge_id = (
+        evidence.target.edge_id
+        if isinstance(evidence.target, EdgeEvidenceTarget)
+        else None
+    )
     connection.execute(
         """
         INSERT INTO evidence (
@@ -224,14 +251,53 @@ def _upsert_evidence(
           content_hash = excluded.content_hash
         """,
         (
-            evidence_id,
+            evidence.evidence_id,
             node_id,
             edge_id,
-            source_ref,
-            occurred_at,
-            occurred_at,
-            excerpt,
-            content_hash,
+            evidence.record.source_ref,
+            evidence.record.occurred_at,
+            evidence.record.occurred_at,
+            evidence.excerpt,
+            evidence.record.content_hash(),
+        ),
+    )
+
+
+def _upsert_import_record(
+    connection: sqlite3.Connection,
+    world_id: str,
+    record: ImportRecord,
+) -> None:
+    record_id = _identifier(
+        "import-record",
+        world_id,
+        record.source_kind,
+        record.source_ref,
+        record.provenance_json(),
+    )
+    connection.execute(
+        """
+        INSERT INTO import_records (
+          record_id, world_id, source_kind, source_ref, occurred_at,
+          raw_text_or_metadata, candidate_entities, provenance, content_hash
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(record_id) DO UPDATE SET
+          occurred_at = excluded.occurred_at,
+          raw_text_or_metadata = excluded.raw_text_or_metadata,
+          candidate_entities = excluded.candidate_entities,
+          provenance = excluded.provenance,
+          content_hash = excluded.content_hash
+        """,
+        (
+            record_id,
+            world_id,
+            record.source_kind,
+            record.source_ref,
+            record.occurred_at,
+            record.raw_metadata_json(),
+            record.candidate_entities_json(),
+            record.provenance_json(),
+            record.content_hash(),
         ),
     )
 
@@ -246,8 +312,24 @@ def _remove_excluded_page(
     topic_id = _identifier("topic", world_id, host)
     edge_id = _identifier("edge", world_id, url, host)
     connection.execute(
-        "DELETE FROM evidence WHERE source_ref = ? OR node_id = ? OR edge_id = ?",
-        (url, page_id, edge_id),
+        """
+        DELETE FROM evidence
+        WHERE node_id = ?
+           OR edge_id = ?
+           OR (
+             source_kind = 'browser_history'
+             AND source_ref = ?
+             AND node_id = ?
+           )
+        """,
+        (page_id, edge_id, url, topic_id),
+    )
+    connection.execute(
+        """
+        DELETE FROM import_records
+        WHERE world_id = ? AND source_kind = 'browser_history' AND source_ref = ?
+        """,
+        (world_id, url),
     )
     connection.execute("DELETE FROM node_aliases WHERE node_id = ?", (page_id,))
     connection.execute("DELETE FROM edges WHERE edge_id = ?", (edge_id,))
@@ -407,25 +489,28 @@ def import_chromium_history(
                     ),
                 )
                 for record in page.import_records():
+                    _upsert_import_record(connection, world_id, record)
                     excerpt = f"Visited {title} on {host}."
                     visit_key = str(record.provenance["chromium_visit_id"])
                     targets = (
-                        ("page", page_id, None),
-                        ("topic", topic_id, None),
-                        ("edge", None, edge_id),
+                        ("page", NodeEvidenceTarget(page_id)),
+                        ("topic", NodeEvidenceTarget(topic_id)),
+                        ("edge", EdgeEvidenceTarget(edge_id)),
                     )
-                    for target, node_id, target_edge_id in targets:
+                    for target_name, target in targets:
                         _upsert_evidence(
                             connection,
-                            _identifier(
-                                f"evidence-{target}", world_id, url, visit_key
+                            EvidenceCandidate(
+                                evidence_id=_identifier(
+                                    f"evidence-{target_name}",
+                                    world_id,
+                                    url,
+                                    visit_key,
+                                ),
+                                target=target,
+                                record=record,
+                                excerpt=excerpt,
                             ),
-                            node_id,
-                            target_edge_id,
-                            record.source_ref,
-                            record.occurred_at,
-                            excerpt,
-                            record.content_hash(),
                         )
 
     return {

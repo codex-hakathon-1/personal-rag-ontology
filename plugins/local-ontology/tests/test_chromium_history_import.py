@@ -117,6 +117,7 @@ class ChromiumHistoryImportTest(unittest.TestCase):
                 first_counts,
                 {
                     "browser_history_records": 2,
+                    "import_records": 3,
                     "nodes": 4,
                     "edges": 2,
                     "evidence": 9,
@@ -124,6 +125,41 @@ class ChromiumHistoryImportTest(unittest.TestCase):
             )
             self.assertNotIn(SENSITIVE_URL, json.dumps(first))
             self.assertNotIn(SENSITIVE_URL, graph_dump)
+
+    def test_normalized_visits_are_retained_separately_from_graph_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            history_path = root / "History"
+            canonical_path = root / "canonical.sqlite3"
+            self._create_history(history_path)
+
+            self._import(history_path, canonical_path)
+
+            with closing(sqlite3.connect(canonical_path)) as connection:
+                records = connection.execute(
+                    "SELECT occurred_at, provenance, candidate_entities "
+                    "FROM import_records WHERE source_kind = 'browser_history' "
+                    "ORDER BY occurred_at"
+                ).fetchall()
+            self.assertEqual(
+                [record[0] for record in records],
+                [
+                    "2025-08-01T10:00:00Z",
+                    "2025-08-02T11:30:00Z",
+                    "2025-08-03T12:00:00Z",
+                ],
+            )
+            self.assertEqual(
+                [json.loads(record[1])["chromium_visit_id"] for record in records],
+                [101, 102, 201],
+            )
+            self.assertTrue(
+                all(
+                    {entity["type"] for entity in json.loads(record[2])}
+                    == {"web_page", "topic"}
+                    for record in records
+                )
+            )
 
     def test_locked_source_import_uses_a_copy_and_preserves_source(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -192,6 +228,32 @@ class ChromiumHistoryImportTest(unittest.TestCase):
             self.assertEqual(first["importedPages"], 3)
             self.assertEqual(second["excludedPages"], 1)
             self.assertNotIn(SENSITIVE_URL, graph_dump)
+
+    def test_stricter_patterns_do_not_delete_another_worlds_evidence(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            history_path = root / "History"
+            canonical_path = root / "canonical.sqlite3"
+            allow_all_path = root / "allow-all.json"
+            allow_all_path.write_text('{"patterns": []}\n', encoding="utf-8")
+            self._create_history(history_path)
+            self._import(history_path, canonical_path, allow_all_path, "personal")
+            self._import(history_path, canonical_path, allow_all_path, "travel")
+
+            self._import(history_path, canonical_path, SENSITIVE_PATTERNS, "travel")
+
+            with closing(sqlite3.connect(canonical_path)) as connection:
+                remaining_evidence = connection.execute(
+                    "SELECT count(*) FROM evidence WHERE source_ref = ?",
+                    (SENSITIVE_URL,),
+                ).fetchone()[0]
+                remaining_records = connection.execute(
+                    "SELECT world_id FROM browser_history_records "
+                    "WHERE source_ref = ? ORDER BY world_id",
+                    (SENSITIVE_URL,),
+                ).fetchall()
+            self.assertEqual(remaining_evidence, 3)
+            self.assertEqual(remaining_records, [("personal",)])
 
     def test_imported_page_is_retrievable_through_session_query(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -287,6 +349,7 @@ class ChromiumHistoryImportTest(unittest.TestCase):
         history_path,
         canonical_path,
         sensitive_patterns=SENSITIVE_PATTERNS,
+        world="travel",
     ):
         result = subprocess.run(
             [
@@ -297,7 +360,7 @@ class ChromiumHistoryImportTest(unittest.TestCase):
                 "--canonical",
                 str(canonical_path),
                 "--world",
-                "travel",
+                world,
                 "--sensitive-patterns",
                 str(sensitive_patterns),
             ],
@@ -325,7 +388,11 @@ class ChromiumHistoryImportTest(unittest.TestCase):
                     f"SELECT count(*) FROM {table}"
                 ).fetchone()[0]
                 for table in (
-                    "browser_history_records", "nodes", "edges", "evidence"
+                    "browser_history_records",
+                    "import_records",
+                    "nodes",
+                    "edges",
+                    "evidence",
                 )
             }
 

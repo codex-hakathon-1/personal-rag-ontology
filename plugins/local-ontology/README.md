@@ -65,10 +65,10 @@ python plugins/local-ontology/scripts/build_session.py `
   --session-dir .local-ontology-session
 ```
 
-Chromium `urls` and `visits` rows become normalized `browser_history_records`, `web_page` and
-host-derived `topic` nodes, `about` edges, and dated evidence. URLs remain source references;
-content bodies are not captured. Stable identifiers and content hashes make unchanged re-imports
-idempotent. The supported fixture schema is documented by
+Chromium `urls` and `visits` rows become aggregate `browser_history_records`, per-visit normalized
+`import_records`, `web_page` and host-derived `topic` nodes, `about` edges, and dated evidence.
+URLs remain source references; content bodies are not captured. Stable identifiers and content
+hashes make unchanged re-imports idempotent. The supported fixture schema is documented by
 `examples/chromium-history-fixture.sql`.
 
 ## SQL safety boundary
