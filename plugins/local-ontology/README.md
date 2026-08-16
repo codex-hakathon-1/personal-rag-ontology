@@ -71,6 +71,36 @@ URLs remain source references; content bodies are not captured. Stable identifie
 hashes make unchanged re-imports idempotent. The supported fixture schema is documented by
 `examples/chromium-history-fixture.sql`.
 
+## Import Codex Markdown logs
+
+Codex logs use UTF-8 Markdown with `title`, `date`, and optional `topics` frontmatter. The
+deterministic MVP extractor recognizes `## User` and `## Assistant` message headings plus
+`Decision:`, `Plan:`, and `Topic:` lines. A sentence immediately following a decision or plan in
+the form `This decision replaces "..."` or `This plan replaces "..."` emits a `supersedes` edge
+with `0.99` confidence and marks only the named older node as superseded. A newer claim without
+that explicit language remains active.
+
+```powershell
+python plugins/local-ontology/scripts/import_codex_logs.py `
+  --logs plugins/local-ontology/examples/codex-logs `
+  --canonical .local-ontology\canonical.sqlite3 `
+  --world personal `
+  --secret-paths plugins/local-ontology/examples/codex-secret-paths.example.json
+
+python plugins/local-ontology/scripts/build_session.py `
+  --canonical .local-ontology\canonical.sqlite3 `
+  --policy plugins/local-ontology/examples/policy.example.json `
+  --world personal `
+  --session-dir .local-ontology-session
+```
+
+The redaction pass runs before parsing or persistence. It replaces common token forms, values
+assigned to key/token/secret/password-like names, and exact paths listed in the optional
+`secret_paths` JSON file. This is conservative pattern matching, not a guarantee that every
+possible secret will be recognized. Stored evidence uses stable `codex://<relative-path>#L<n>`
+references and dated content hashes; re-importing a changed source reconciles its old graph rows
+instead of duplicating them.
+
 ## SQL safety boundary
 
 The query harness accepts one `SELECT` or `WITH` statement, including recursive CTEs, against
