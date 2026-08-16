@@ -1,0 +1,81 @@
+{
+  "worlds": [
+    {
+      "world_id": "personal",
+      "name": "Personal",
+      "description": "Private personal records",
+      "enabled": 1
+    },
+    {
+      "world_id": "travel",
+      "name": "Travel",
+      "description": "Travel planning records",
+      "enabled": 1
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "travel-plan-kyoto-ryokan",
+      "world_id": "travel",
+      "type": "plan",
+      "canonical_name": "Kyoto ryokan",
+      "summary": "Booked a riverside ryokan for the Kyoto leg.",
+      "state": "active",
+      "sensitivity": "normal",
+      "valid_from": "2025-03-18",
+      "valid_to": null,
+      "last_seen_at": "2025-03-18T09:30:00Z",
+      "superseded_by": null,
+      "created_at": "2025-03-18T09:30:00Z",
+      "updated_at": "2025-03-18T09:30:00Z"
+    },
+    {
+      "node_id": "personal-preference-coffee",
+      "world_id": "personal",
+      "type": "preference",
+      "canonical_name": "Morning coffee",
+      "summary": "Prefers a flat white before work.",
+      "state": "active",
+      "sensitivity": "normal",
+      "valid_from": "2025-02-01",
+      "valid_to": null,
+      "last_seen_at": "2025-02-01T08:00:00Z",
+      "superseded_by": null,
+      "created_at": "2025-02-01T08:00:00Z",
+      "updated_at": "2025-02-01T08:00:00Z"
+    }
+  ],
+  "node_aliases": [
+    {
+      "alias": "Kyoto stay",
+      "node_id": "travel-plan-kyoto-ryokan",
+      "source": "fixture",
+      "confidence": 1.0
+    }
+  ],
+  "edges": [],
+  "evidence": [
+    {
+      "evidence_id": "evidence-travel-kyoto-ryokan",
+      "node_id": "travel-plan-kyoto-ryokan",
+      "edge_id": null,
+      "source_kind": "codex_logs",
+      "source_ref": "fixture://travel/kyoto-plan.md#L12",
+      "occurred_at": "2025-03-18T09:30:00Z",
+      "observed_at": "2025-03-18T09:31:00Z",
+      "excerpt": "Booked a riverside ryokan for the Kyoto leg.",
+      "content_hash": "fixture-sha256-kyoto-ryokan"
+    },
+    {
+      "evidence_id": "evidence-personal-coffee",
+      "node_id": "personal-preference-coffee",
+      "edge_id": null,
+      "source_kind": "codex_logs",
+      "source_ref": "fixture://personal/preferences.md#L4",
+      "occurred_at": "2025-02-01T08:00:00Z",
+      "observed_at": "2025-02-01T08:01:00Z",
+      "excerpt": "Prefers a flat white before work.",
+      "content_hash": "fixture-sha256-personal-coffee"
+    }
+  ]
+}

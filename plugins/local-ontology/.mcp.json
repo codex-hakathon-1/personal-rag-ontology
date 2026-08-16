@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "local_ontology": {
+      "command": "python",
+      "args": [
+        "scripts/mcp_server.py"
+      ],
+      "cwd": "."
+    }
+  }
+}

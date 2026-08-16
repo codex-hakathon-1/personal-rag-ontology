@@ -1,0 +1,15 @@
+{
+  "worlds": {
+    "personal": {
+      "include_sources": ["codex_logs"],
+      "include_states": ["active"],
+      "deny_sensitivity": ["secret", "identity"]
+    },
+    "travel": {
+      "include_sources": ["codex_logs"],
+      "allow_node_types": ["plan", "place"],
+      "include_states": ["active"],
+      "deny_sensitivity": ["secret", "identity"]
+    }
+  }
+}

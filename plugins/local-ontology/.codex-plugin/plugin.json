@@ -1,0 +1,21 @@
+{
+  "name": "local-ontology",
+  "version": "0.1.0",
+  "description": "Query a local, policy-bounded SQLite memory graph on demand.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Local Ontology",
+    "shortDescription": "Use Local Ontology in Codex.",
+    "longDescription": "Build a selected-world capability database locally and query only its policy-approved facts with SQL.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": "Query my selected Local Ontology world when historical context would help."
+  },
+  "mcpServers": "./.mcp.json"
+}
