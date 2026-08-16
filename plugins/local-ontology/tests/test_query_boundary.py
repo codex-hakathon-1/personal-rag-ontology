@@ -15,17 +15,36 @@ from query_harness import QueryAuditContext, QueryRejected, query
 
 class QueryBoundaryTest(unittest.TestCase):
     def setUp(self):
+        self.audit_directory = tempfile.TemporaryDirectory()
         self.connection = sqlite3.connect(":memory:")
         self.connection.execute("CREATE TABLE memories (value TEXT NOT NULL)")
         self.connection.execute("INSERT INTO memories VALUES ('allowed')")
         self.connection.commit()
+        self.audit_context = QueryAuditContext(
+            path=Path(self.audit_directory.name) / "query-audit.jsonl",
+            session_identifier="test-session",
+            world_identifier="test-world",
+        )
 
     def tearDown(self):
         self.connection.close()
+        self.audit_directory.cleanup()
+
+    def run_query(self, sql, **limits):
+        return query(
+            self.connection,
+            sql,
+            audit_context=self.audit_context,
+            **limits,
+        )
+
+    def test_query_cannot_execute_without_an_audit_context(self):
+        with self.assertRaisesRegex(TypeError, "audit_context"):
+            query(self.connection, "SELECT value FROM memories")
 
     def test_system_objects_are_rejected(self):
         with self.assertRaisesRegex(QueryRejected, "prohibited database object"):
-            query(self.connection, "SELECT name FROM sqlite_schema")
+            self.run_query("SELECT name FROM sqlite_schema")
 
     def test_attached_databases_cannot_be_queried(self):
         self.connection.execute("ATTACH DATABASE ':memory:' AS canonical")
@@ -33,7 +52,7 @@ class QueryBoundaryTest(unittest.TestCase):
         self.connection.execute("INSERT INTO canonical.secrets VALUES ('forbidden')")
 
         with self.assertRaisesRegex(QueryRejected, "prohibited database object"):
-            query(self.connection, "SELECT value FROM canonical.secrets")
+            self.run_query("SELECT value FROM canonical.secrets")
 
     def test_mutations_are_rejected_even_on_a_writable_connection(self):
         statements = {
@@ -50,7 +69,7 @@ class QueryBoundaryTest(unittest.TestCase):
         for operation, statement in statements.items():
             with self.subTest(operation=operation):
                 with self.assertRaises(QueryRejected):
-                    query(self.connection, statement)
+                    self.run_query(statement)
 
         self.assertEqual(
             self.connection.execute("SELECT value FROM memories").fetchall(),
@@ -76,7 +95,7 @@ class QueryBoundaryTest(unittest.TestCase):
         for operation, statement in statements.items():
             with self.subTest(operation=operation):
                 with self.assertRaises(QueryRejected):
-                    query(self.connection, statement)
+                    self.run_query(statement)
 
     def test_sqlite_capability_bypasses_are_rejected(self):
         self.connection.execute("CREATE TEMP TABLE temporary_memories (value TEXT)")
@@ -98,21 +117,19 @@ class QueryBoundaryTest(unittest.TestCase):
         for operation, statement in statements.items():
             with self.subTest(operation=operation):
                 with self.assertRaises(QueryRejected):
-                    query(self.connection, statement)
+                    self.run_query(statement)
 
     def test_extension_loading_is_rejected_when_sqlite_enables_it(self):
         self.connection.enable_load_extension(True)
 
         with self.assertRaisesRegex(QueryRejected, "prohibited SQL function"):
-            query(self.connection, "SELECT load_extension('missing')")
+            self.run_query("SELECT load_extension('missing')")
 
     def test_read_only_queries_and_recursive_ctes_are_allowed(self):
-        ordinary = query(
-            self.connection,
+        ordinary = self.run_query(
             "-- a normal model-generated comment\nSELECT value FROM memories",
         )
-        recursive = query(
-            self.connection,
+        recursive = self.run_query(
             """
             WITH RECURSIVE numbers(value) AS (
                 SELECT 1
@@ -130,8 +147,7 @@ class QueryBoundaryTest(unittest.TestCase):
         )
 
     def test_row_limit_reports_truncation(self):
-        result = query(
-            self.connection,
+        result = self.run_query(
             """
             WITH candidates(value) AS (VALUES (1), (2), (3))
             SELECT value FROM candidates ORDER BY value
@@ -148,8 +164,7 @@ class QueryBoundaryTest(unittest.TestCase):
         started = time.monotonic()
 
         with self.assertRaisesRegex(QueryRejected, "execution time limit"):
-            query(
-                self.connection,
+            self.run_query(
                 """
                 WITH RECURSIVE forever(value) AS (
                     SELECT 1
@@ -162,6 +177,16 @@ class QueryBoundaryTest(unittest.TestCase):
             )
 
         self.assertLess(time.monotonic() - started, 1)
+
+    def test_execution_time_limit_rejects_one_slow_sqlite_function(self):
+        self.connection.create_function(
+            "slow_value",
+            0,
+            lambda: time.sleep(0.02) or 1,
+        )
+
+        with self.assertRaisesRegex(QueryRejected, "execution time limit"):
+            self.run_query("SELECT slow_value()", max_execution_ms=1)
 
     def test_every_attempt_writes_a_payload_free_audit_entry(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -205,6 +230,21 @@ class QueryBoundaryTest(unittest.TestCase):
         self.assertNotIn("allowed", audit_text)
         self.assertNotIn("SELECT value", audit_text)
         self.assertNotIn("DELETE FROM", audit_text)
+
+    def test_sql_fingerprint_distinguishes_whitespace_inside_literals(self):
+        self.run_query("SELECT 'a b' AS value")
+        self.run_query("SELECT 'a  b' AS value")
+        entries = [
+            json.loads(line)
+            for line in self.audit_context.path.read_text(
+                encoding="utf-8"
+            ).splitlines()
+        ]
+
+        self.assertNotEqual(
+            entries[0]["sqlFingerprint"],
+            entries[1]["sqlFingerprint"],
+        )
 
 
 if __name__ == "__main__":

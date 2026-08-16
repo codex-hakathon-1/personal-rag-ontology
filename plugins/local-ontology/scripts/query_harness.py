@@ -10,11 +10,14 @@ from pathlib import Path
 import re
 import sqlite3
 import time
-from typing import Any
+from typing import Any, Literal
 
 
 class QueryRejected(ValueError):
     """Raised when SQL is outside the read-only MVP query contract."""
+
+
+AuditOutcome = Literal["failed", "rejected", "succeeded"]
 
 
 @dataclass(frozen=True)
@@ -30,13 +33,11 @@ class QueryAuditContext:
         sql: object,
         execution_time_ms: float,
         row_count: int,
-        outcome: str,
+        outcome: AuditOutcome,
         truncated: bool,
     ) -> None:
         fingerprint_source = (
-            " ".join(sql.split())
-            if isinstance(sql, str)
-            else f"<invalid:{type(sql).__name__}>"
+            sql if isinstance(sql, str) else f"<invalid:{type(sql).__name__}>"
         )
         entry = {
             "sqlFingerprint": hashlib.sha256(
@@ -149,6 +150,9 @@ def _execute_query(
     try:
         cursor = connection.execute(statement)
         fetched = cursor.fetchmany(max_rows + 1)
+        if time.monotonic() >= deadline:
+            execution_timed_out = True
+            raise sqlite3.OperationalError("query execution time limit exceeded")
         truncated = len(fetched) > max_rows
         rows = [dict(row) for row in fetched[:max_rows]]
         return {
@@ -175,14 +179,14 @@ def query(
     max_rows: int = 100,
     max_execution_ms: int = 1_000,
     *,
-    audit_context: QueryAuditContext | None = None,
+    audit_context: QueryAuditContext,
 ) -> dict[str, Any]:
-    """Run one bounded read-only statement and record the attempt when configured."""
+    """Run one bounded read-only statement and record the attempt."""
 
     started = time.monotonic()
     row_count = 0
     truncated = False
-    outcome = "failed"
+    outcome: AuditOutcome = "failed"
     try:
         result = _execute_query(connection, sql, max_rows, max_execution_ms)
         row_count = result["rowCount"]
@@ -193,11 +197,10 @@ def query(
         outcome = "rejected"
         raise
     finally:
-        if audit_context is not None:
-            audit_context.record(
-                sql=sql,
-                execution_time_ms=(time.monotonic() - started) * 1_000,
-                row_count=row_count,
-                outcome=outcome,
-                truncated=truncated,
-            )
+        audit_context.record(
+            sql=sql,
+            execution_time_ms=(time.monotonic() - started) * 1_000,
+            row_count=row_count,
+            outcome=outcome,
+            truncated=truncated,
+        )
