@@ -1,0 +1,562 @@
+{
+  "sources": [
+    {
+      "id": "src-codex",
+      "name": "Codex conversations",
+      "kind": "codex",
+      "description": "Project topics, decisions, and plans extracted from local conversations.",
+      "itemCount": 48,
+      "lastSyncedAt": "2026-08-16T03:20:00Z",
+      "status": "connected"
+    },
+    {
+      "id": "src-browser",
+      "name": "Browser history",
+      "kind": "browser",
+      "description": "Visited documentation and research pages from local browser history.",
+      "itemCount": 30,
+      "lastSyncedAt": "2026-08-16T04:05:00Z",
+      "status": "connected"
+    },
+    {
+      "id": "src-takeout",
+      "name": "Google Maps Takeout",
+      "kind": "takeout",
+      "description": "Saved place context imported from a sanitized local Takeout export.",
+      "itemCount": 3,
+      "lastSyncedAt": "2026-08-15T08:10:00Z",
+      "status": "connected"
+    },
+    {
+      "id": "src-manual",
+      "name": "Curated graph overlay",
+      "kind": "manual",
+      "description": "Explicit relationships added by the deterministic demo fixture.",
+      "itemCount": 9,
+      "lastSyncedAt": "2026-08-16T03:20:00Z",
+      "status": "connected"
+    }
+  ],
+  "attributes": [
+    {
+      "id": "decision-458b9ed77b23c3327f73acd453839540",
+      "title": "관찰 기간은 설치 다음 날부터 28일로 정한다.",
+      "value": "관찰 기간은 설치 다음 날부터 28일로 정한다.",
+      "category": "Decision",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "Decision: 관찰 기간은 설치 다음 날부터 28일로 정한다.",
+      "sourceRef": "codex://2026-07-29-chatbot-metrics.md#L13",
+      "observedAt": "2026-07-29T06:50:00Z",
+      "updatedAt": "2026-07-29T06:50:00Z"
+    },
+    {
+      "id": "decision-81ba8695111efed12a169955e5eee5b6",
+      "title": "모델은 정본 저장소가 아니라 정책으로 잘라낸 별도 SQLite 데이터베이스만 조회한다.",
+      "value": "모델은 정본 저장소가 아니라 정책으로 잘라낸 별도 SQLite 데이터베이스만 조회한다.",
+      "category": "Decision",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "Decision: 모델은 정본 저장소가 아니라 정책으로 잘라낸 별도 SQLite 데이터베이스만 조회한다.",
+      "sourceRef": "codex://2026-08-16-local-ontology.md#L13",
+      "observedAt": "2026-08-16T03:20:00Z",
+      "updatedAt": "2026-08-16T03:20:00Z"
+    },
+    {
+      "id": "decision-addd0edea867e635c7cf3009c866a2d8",
+      "title": "첫 버전은 자체 커널 드라이버 없이 기존 가상 케이블과 WASAPI를 사용한다.",
+      "value": "첫 버전은 자체 커널 드라이버 없이 기존 가상 케이블과 WASAPI를 사용한다.",
+      "category": "Decision",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "Decision: 첫 버전은 자체 커널 드라이버 없이 기존 가상 케이블과 WASAPI를 사용한다.",
+      "sourceRef": "codex://2026-08-11-audio-mixer.md#L13",
+      "observedAt": "2026-08-11T07:40:00Z",
+      "updatedAt": "2026-08-11T07:40:00Z"
+    },
+    {
+      "id": "decision-36d8959a33c5a119232b8150ec7a1af5",
+      "title": "첫 화면은 공식 암기보다 중심과 반지름 조작에 집중한다.",
+      "value": "첫 화면은 공식 암기보다 중심과 반지름 조작에 집중한다.",
+      "category": "Decision",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "Decision: 첫 화면은 공식 암기보다 중심과 반지름 조작에 집중한다.",
+      "sourceRef": "codex://2026-08-04-interactive-math.md#L13",
+      "observedAt": "2026-08-04T01:25:00Z",
+      "updatedAt": "2026-08-04T01:25:00Z"
+    },
+    {
+      "id": "plan-a191d26ca32fefc60024f213f184343a",
+      "title": "명시적 개인 앵커가 있을 때만 두 홉 이내를 출처와 날짜를 포함해 조회한다.",
+      "value": "명시적 개인 앵커가 있을 때만 두 홉 이내를 출처와 날짜를 포함해 조회한다.",
+      "category": "Plan",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "Plan: 명시적 개인 앵커가 있을 때만 두 홉 이내를 출처와 날짜를 포함해 조회한다.",
+      "sourceRef": "codex://2026-08-16-local-ontology.md#L15",
+      "observedAt": "2026-08-16T03:20:00Z",
+      "updatedAt": "2026-08-16T03:20:00Z"
+    },
+    {
+      "id": "plan-800a9ec4948a97225defabe3708da45f",
+      "title": "진단, 시각화 탐색, 풀이 연습, 회고 순서로 수업을 구성한다.",
+      "value": "진단, 시각화 탐색, 풀이 연습, 회고 순서로 수업을 구성한다.",
+      "category": "Plan",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "Plan: 진단, 시각화 탐색, 풀이 연습, 회고 순서로 수업을 구성한다.",
+      "sourceRef": "codex://2026-08-04-interactive-math.md#L15",
+      "observedAt": "2026-08-04T01:25:00Z",
+      "updatedAt": "2026-08-04T01:25:00Z"
+    },
+    {
+      "id": "plan-bf721f24ebd29aa578e9ec07e0a61dd4",
+      "title": "프로세스별 루프백 캡처를 검증한 뒤 라우팅 엔진과 최소 UI를 만든다.",
+      "value": "프로세스별 루프백 캡처를 검증한 뒤 라우팅 엔진과 최소 UI를 만든다.",
+      "category": "Plan",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "Plan: 프로세스별 루프백 캡처를 검증한 뒤 라우팅 엔진과 최소 UI를 만든다.",
+      "sourceRef": "codex://2026-08-11-audio-mixer.md#L15",
+      "observedAt": "2026-08-11T07:40:00Z",
+      "updatedAt": "2026-08-11T07:40:00Z"
+    },
+    {
+      "id": "plan-7e83ffffb9e40bd6fb16a8d7987319ca",
+      "title": "활성일 수, 대화 세션 수, 메시지 수를 사용자 단위 열로 만들고 원자료와 대조한다.",
+      "value": "활성일 수, 대화 세션 수, 메시지 수를 사용자 단위 열로 만들고 원자료와 대조한다.",
+      "category": "Plan",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "Plan: 활성일 수, 대화 세션 수, 메시지 수를 사용자 단위 열로 만들고 원자료와 대조한다.",
+      "sourceRef": "codex://2026-07-29-chatbot-metrics.md#L15",
+      "observedAt": "2026-07-29T06:50:00Z",
+      "updatedAt": "2026-07-29T06:50:00Z"
+    },
+    {
+      "id": "web-page-ab8aec9fb576d10af1eb73804915c0fe",
+      "title": "Application Loopback Audio sample",
+      "value": "관련 리서치: Application Loopback Audio sample",
+      "category": "Research",
+      "sourceId": "src-browser",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "Visited Application Loopback Audio sample on learn.microsoft.com.",
+      "sourceRef": "https://learn.microsoft.com/en-us/samples/microsoft/windows-classic-samples/applicationloopbackaudio-sample/",
+      "observedAt": "2026-08-11T07:25:00Z",
+      "updatedAt": "2026-08-11T07:25:00Z"
+    },
+    {
+      "id": "web-page-eb7772dccd9e18a6e73478bfbe015bea",
+      "title": "GeoGebra graphing calculator",
+      "value": "관련 리서치: GeoGebra graphing calculator",
+      "category": "Research",
+      "sourceId": "src-browser",
+      "confidence": 0.95,
+      "status": "kept",
+      "excerpt": "Visited GeoGebra graphing calculator on www.geogebra.org.",
+      "sourceRef": "https://www.geogebra.org/graphing",
+      "observedAt": "2026-08-04T01:15:00Z",
+      "updatedAt": "2026-08-04T01:15:00Z"
+    },
+    {
+      "id": "web-page-1b91a20ece2bbfeab2c5f85410dcec7d",
+      "title": "SQLite WITH and recursive CTE documentation",
+      "value": "관련 리서치: SQLite WITH and recursive CTE documentation",
+      "category": "Research",
+      "sourceId": "src-browser",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "Visited SQLite WITH and recursive CTE documentation on www.sqlite.org.",
+      "sourceRef": "https://www.sqlite.org/lang_with.html",
+      "observedAt": "2026-08-16T03:10:00Z",
+      "updatedAt": "2026-08-16T03:10:00Z"
+    },
+    {
+      "id": "web-page-0f1504e43caecb5155e7ccc0d6162504",
+      "title": "pandas DataFrame.merge documentation",
+      "value": "관련 리서치: pandas DataFrame.merge documentation",
+      "category": "Research",
+      "sourceId": "src-browser",
+      "confidence": 0.95,
+      "status": "kept",
+      "excerpt": "Visited pandas DataFrame.merge documentation on pandas.pydata.org.",
+      "sourceRef": "https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.merge.html",
+      "observedAt": "2026-07-29T06:45:00Z",
+      "updatedAt": "2026-07-29T06:45:00Z"
+    },
+    {
+      "id": "place-3ae75d10a88917868d58832a8fbb9e37",
+      "title": "마포 데모 음악연습실",
+      "value": "관련 장소: 마포 데모 음악연습실",
+      "category": "Place",
+      "sourceId": "src-takeout",
+      "confidence": 0.7,
+      "status": "suggested",
+      "excerpt": "Saved Google Maps place at 대한민국 서울특별시 마포구 예시로 7 (합성 주소).",
+      "sourceRef": "https://www.google.com/maps/place/?q=place_id:demo-mapo-audio-room",
+      "observedAt": "2026-08-10T10:00:00Z",
+      "updatedAt": "2026-08-10T10:00:00Z"
+    },
+    {
+      "id": "place-6c4ee8add92bebc87606bbf9e9a7644a",
+      "title": "서울 데이터랩",
+      "value": "관련 장소: 서울 데이터랩",
+      "category": "Place",
+      "sourceId": "src-takeout",
+      "confidence": 0.8,
+      "status": "suggested",
+      "excerpt": "Saved Google Maps place at 대한민국 서울특별시 중구 데모로 28 (합성 주소).",
+      "sourceRef": "https://www.google.com/maps/place/?q=place_id:demo-seoul-data-lab",
+      "observedAt": "2026-07-29T04:30:00Z",
+      "updatedAt": "2026-07-29T04:30:00Z"
+    },
+    {
+      "id": "place-eb1ad4cf308b3172e201b1604123b525",
+      "title": "성수 데모 워크라운지",
+      "value": "관련 장소: 성수 데모 워크라운지",
+      "category": "Place",
+      "sourceId": "src-takeout",
+      "confidence": 0.75,
+      "status": "suggested",
+      "excerpt": "Saved Google Maps place at 대한민국 서울특별시 성동구 샘플길 16 (합성 주소).",
+      "sourceRef": "https://www.google.com/maps/place/?q=place_id:demo-seongsu-work-lounge",
+      "observedAt": "2026-08-15T08:10:00Z",
+      "updatedAt": "2026-08-15T08:10:00Z"
+    },
+    {
+      "id": "topic-1ac71e5a125697cca8930e7ee47522de",
+      "title": "SQLite",
+      "value": "관련 주제: SQLite",
+      "category": "Topic",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "SQLite",
+      "sourceRef": "codex://2026-08-16-local-ontology.md#L4",
+      "observedAt": "2026-08-16T03:20:00Z",
+      "updatedAt": "2026-08-16T03:20:00Z"
+    },
+    {
+      "id": "topic-6e25e5fc3b31225445a899452020e76b",
+      "title": "사용량 지표",
+      "value": "관련 주제: 사용량 지표",
+      "category": "Topic",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "사용량 지표",
+      "sourceRef": "codex://2026-07-29-chatbot-metrics.md#L4",
+      "observedAt": "2026-07-29T06:50:00Z",
+      "updatedAt": "2026-07-29T06:50:00Z"
+    },
+    {
+      "id": "topic-5a9ea7a3603866b6de12d854b4053a7d",
+      "title": "사회적 챗봇 성과 분석",
+      "value": "관련 주제: 사회적 챗봇 성과 분석",
+      "category": "Topic",
+      "sourceId": "src-codex",
+      "confidence": 0.9,
+      "status": "kept",
+      "excerpt": "사회적 챗봇 성과 분석",
+      "sourceRef": "codex://2026-07-29-chatbot-metrics.md#L4",
+      "observedAt": "2026-07-29T06:50:00Z",
+      "updatedAt": "2026-07-29T06:50:00Z"
+    },
+    {
+      "id": "topic-0fc183182890e7e2cd0b17b286e17d59",
+      "title": "원의 방정식",
+      "value": "관련 주제: 원의 방정식",
+      "category": "Topic",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "원의 방정식",
+      "sourceRef": "codex://2026-08-04-interactive-math.md#L4",
+      "observedAt": "2026-08-04T01:25:00Z",
+      "updatedAt": "2026-08-04T01:25:00Z"
+    },
+    {
+      "id": "topic-3fd5b6c2d6cec75ff9bc50adae43597e",
+      "title": "정책 기반 검색",
+      "value": "관련 주제: 정책 기반 검색",
+      "category": "Topic",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "정책 기반 검색",
+      "sourceRef": "codex://2026-08-16-local-ontology.md#L4",
+      "observedAt": "2026-08-16T03:20:00Z",
+      "updatedAt": "2026-08-16T03:20:00Z"
+    },
+    {
+      "id": "topic-87c164fcd6419edaef16bb9c3ee7f69d",
+      "title": "코호트 이용 분석",
+      "value": "관련 주제: 코호트 이용 분석",
+      "category": "Topic",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "Topic: 코호트 이용 분석",
+      "sourceRef": "codex://2026-07-29-chatbot-metrics.md#L17",
+      "observedAt": "2026-07-29T06:50:00Z",
+      "updatedAt": "2026-07-29T06:50:00Z"
+    },
+    {
+      "id": "topic-0cab24253121b34e13877f0779ceb33b",
+      "title": "화자 분리",
+      "value": "관련 주제: 화자 분리",
+      "category": "Topic",
+      "sourceId": "src-codex",
+      "confidence": 1.0,
+      "status": "kept",
+      "excerpt": "화자 분리",
+      "sourceRef": "codex://2026-08-11-audio-mixer.md#L4",
+      "observedAt": "2026-08-11T07:40:00Z",
+      "updatedAt": "2026-08-11T07:40:00Z"
+    }
+  ],
+  "projects": [
+    {
+      "id": "project-topic-b805fd888055e54aaa88cb2cc28b6eed",
+      "name": "개인용 로컬 온톨로지",
+      "description": "개인용 로컬 온톨로지 설계에서 수집한 결정, 계획, 리서치와 장소 맥락.",
+      "status": "active",
+      "memoryStatus": "added",
+      "updatedAt": "2026-08-16T03:20:00Z"
+    },
+    {
+      "id": "project-topic-67ce88776e44a2e2aa23361d1ba76857",
+      "name": "가상 오디오 믹서",
+      "description": "가상 오디오 믹서 조사에서 수집한 결정, 계획, 리서치와 장소 맥락.",
+      "status": "active",
+      "memoryStatus": "added",
+      "updatedAt": "2026-08-11T07:40:00Z"
+    },
+    {
+      "id": "project-topic-1c0c32ef0c8d66c8f8c9c5e2a95999e6",
+      "name": "인터랙티브 수학 교재",
+      "description": "인터랙티브 수학 수업 설계에서 수집한 결정, 계획, 리서치와 장소 맥락.",
+      "status": "active",
+      "memoryStatus": "added",
+      "updatedAt": "2026-08-04T01:25:00Z"
+    },
+    {
+      "id": "project-topic-5a9ea7a3603866b6de12d854b4053a7d",
+      "name": "사회적 챗봇 성과 분석",
+      "description": "사회적 챗봇 사용량 분석에서 수집한 결정, 계획, 리서치와 장소 맥락.",
+      "status": "active",
+      "memoryStatus": "added",
+      "updatedAt": "2026-07-29T06:50:00Z"
+    }
+  ],
+  "projectAttributes": [
+    {
+      "projectId": "project-topic-b805fd888055e54aaa88cb2cc28b6eed",
+      "attributeId": "decision-81ba8695111efed12a169955e5eee5b6",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-16T03:20:00Z"
+    },
+    {
+      "projectId": "project-topic-b805fd888055e54aaa88cb2cc28b6eed",
+      "attributeId": "plan-a191d26ca32fefc60024f213f184343a",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-16T03:20:00Z"
+    },
+    {
+      "projectId": "project-topic-b805fd888055e54aaa88cb2cc28b6eed",
+      "attributeId": "web-page-1b91a20ece2bbfeab2c5f85410dcec7d",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-16T03:10:00Z"
+    },
+    {
+      "projectId": "project-topic-b805fd888055e54aaa88cb2cc28b6eed",
+      "attributeId": "place-eb1ad4cf308b3172e201b1604123b525",
+      "status": "suggested",
+      "valueStatus": "suggested",
+      "sourceStatus": "suggested",
+      "confidenceStatus": "suggested",
+      "suggestedAt": "2026-08-15T08:10:00Z"
+    },
+    {
+      "projectId": "project-topic-b805fd888055e54aaa88cb2cc28b6eed",
+      "attributeId": "topic-1ac71e5a125697cca8930e7ee47522de",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-16T03:20:00Z"
+    },
+    {
+      "projectId": "project-topic-b805fd888055e54aaa88cb2cc28b6eed",
+      "attributeId": "topic-5a9ea7a3603866b6de12d854b4053a7d",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "suggested",
+      "suggestedAt": "2026-07-29T06:50:00Z"
+    },
+    {
+      "projectId": "project-topic-b805fd888055e54aaa88cb2cc28b6eed",
+      "attributeId": "topic-3fd5b6c2d6cec75ff9bc50adae43597e",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-16T03:20:00Z"
+    },
+    {
+      "projectId": "project-topic-67ce88776e44a2e2aa23361d1ba76857",
+      "attributeId": "decision-addd0edea867e635c7cf3009c866a2d8",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-11T07:40:00Z"
+    },
+    {
+      "projectId": "project-topic-67ce88776e44a2e2aa23361d1ba76857",
+      "attributeId": "plan-bf721f24ebd29aa578e9ec07e0a61dd4",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-11T07:40:00Z"
+    },
+    {
+      "projectId": "project-topic-67ce88776e44a2e2aa23361d1ba76857",
+      "attributeId": "web-page-ab8aec9fb576d10af1eb73804915c0fe",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-11T07:25:00Z"
+    },
+    {
+      "projectId": "project-topic-67ce88776e44a2e2aa23361d1ba76857",
+      "attributeId": "place-3ae75d10a88917868d58832a8fbb9e37",
+      "status": "suggested",
+      "valueStatus": "suggested",
+      "sourceStatus": "suggested",
+      "confidenceStatus": "suggested",
+      "suggestedAt": "2026-08-10T10:00:00Z"
+    },
+    {
+      "projectId": "project-topic-67ce88776e44a2e2aa23361d1ba76857",
+      "attributeId": "topic-0cab24253121b34e13877f0779ceb33b",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-11T07:40:00Z"
+    },
+    {
+      "projectId": "project-topic-1c0c32ef0c8d66c8f8c9c5e2a95999e6",
+      "attributeId": "decision-36d8959a33c5a119232b8150ec7a1af5",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-04T01:25:00Z"
+    },
+    {
+      "projectId": "project-topic-1c0c32ef0c8d66c8f8c9c5e2a95999e6",
+      "attributeId": "plan-800a9ec4948a97225defabe3708da45f",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-04T01:25:00Z"
+    },
+    {
+      "projectId": "project-topic-1c0c32ef0c8d66c8f8c9c5e2a95999e6",
+      "attributeId": "web-page-eb7772dccd9e18a6e73478bfbe015bea",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "suggested",
+      "suggestedAt": "2026-08-04T01:15:00Z"
+    },
+    {
+      "projectId": "project-topic-1c0c32ef0c8d66c8f8c9c5e2a95999e6",
+      "attributeId": "topic-0fc183182890e7e2cd0b17b286e17d59",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-08-04T01:25:00Z"
+    },
+    {
+      "projectId": "project-topic-5a9ea7a3603866b6de12d854b4053a7d",
+      "attributeId": "decision-458b9ed77b23c3327f73acd453839540",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-07-29T06:50:00Z"
+    },
+    {
+      "projectId": "project-topic-5a9ea7a3603866b6de12d854b4053a7d",
+      "attributeId": "plan-7e83ffffb9e40bd6fb16a8d7987319ca",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-07-29T06:50:00Z"
+    },
+    {
+      "projectId": "project-topic-5a9ea7a3603866b6de12d854b4053a7d",
+      "attributeId": "web-page-0f1504e43caecb5155e7ccc0d6162504",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "suggested",
+      "suggestedAt": "2026-07-29T06:45:00Z"
+    },
+    {
+      "projectId": "project-topic-5a9ea7a3603866b6de12d854b4053a7d",
+      "attributeId": "place-6c4ee8add92bebc87606bbf9e9a7644a",
+      "status": "suggested",
+      "valueStatus": "suggested",
+      "sourceStatus": "suggested",
+      "confidenceStatus": "suggested",
+      "suggestedAt": "2026-07-29T04:30:00Z"
+    },
+    {
+      "projectId": "project-topic-5a9ea7a3603866b6de12d854b4053a7d",
+      "attributeId": "topic-6e25e5fc3b31225445a899452020e76b",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-07-29T06:50:00Z"
+    },
+    {
+      "projectId": "project-topic-5a9ea7a3603866b6de12d854b4053a7d",
+      "attributeId": "topic-87c164fcd6419edaef16bb9c3ee7f69d",
+      "status": "added",
+      "valueStatus": "added",
+      "sourceStatus": "added",
+      "confidenceStatus": "added",
+      "suggestedAt": "2026-07-29T06:50:00Z"
+    }
+  ]
+}

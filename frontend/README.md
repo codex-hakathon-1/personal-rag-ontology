@@ -13,6 +13,15 @@ npm run dev
 Without configuration, the app uses an in-memory demo implementation behind the same API
 interface as production. Set `VITE_API_BASE_URL` to connect the REST client to a server.
 
+The demo workspace is generated from the sanitized capability database rather than maintained
+as a second handwritten dataset. After refreshing `demo-output/realistic-user/capability.sqlite3`,
+regenerate the committed frontend snapshot with:
+
+```sh
+cd frontend
+npm run generate:demo
+```
+
 ## Frontend contract
 
 The UI imports only the domain types in `src/domain.ts` and the `OntologyApi` interface in

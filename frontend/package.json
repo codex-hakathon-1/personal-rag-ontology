@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "generate:demo": "python3 scripts/generate_realistic_workspace.py",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -27,4 +28,3 @@
     "typescript-eslint": "latest"
   }
 }
-
