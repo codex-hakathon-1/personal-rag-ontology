@@ -121,3 +121,7 @@ film.
 <p align="center">
   <a href="./frontend/public/media/mesource-demo.mp4">Watch the HD demo with sound (MP4)</a>
 </p>
+
+## Presentation
+
+The team presentation is available at [MESOURCE_1팀.pdf](./MESOURCE_1팀.pdf).
