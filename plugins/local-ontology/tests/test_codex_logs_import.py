@@ -241,6 +241,43 @@ class CodexLogsImportTest(unittest.TestCase):
             self.assertEqual(remaining_plans, [("Ship the beta.", "active")])
             self.assertEqual(remaining_edges, 0)
 
+    def test_domain_prose_using_replaces_is_not_a_supersession_signal(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            log_path = root / "cache.md"
+            log_path.write_text(
+                "\n".join(
+                    [
+                        "---",
+                        "title: Cache behavior",
+                        "date: 2025-04-02T10:00:00Z",
+                        "---",
+                        "",
+                        "## Assistant",
+                        "",
+                        "Decision: The cache replaces stale entries automatically.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            canonical_path = root / "canonical.sqlite3"
+
+            report = self._import(log_path, canonical_path)
+
+            with closing(sqlite3.connect(canonical_path)) as connection:
+                decisions = connection.execute(
+                    "SELECT canonical_name FROM nodes WHERE type = 'decision'"
+                ).fetchall()
+                edge_count = connection.execute(
+                    "SELECT count(*) FROM edges WHERE relation = 'supersedes'"
+                ).fetchone()[0]
+            self.assertEqual(
+                decisions,
+                [("The cache replaces stale entries automatically.",)],
+            )
+            self.assertEqual(edge_count, 0)
+            self.assertEqual(report["explicitSupersessions"], 0)
+
     def test_reimport_is_idempotent_and_changed_content_updates_hashes(self):
         source = LOG_FIXTURES / "2025-03-20-review.md"
         with tempfile.TemporaryDirectory() as temporary_directory:

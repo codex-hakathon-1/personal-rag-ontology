@@ -16,6 +16,7 @@ from codex_log_parser import (
     CodexMessage,
     EntityType,
     ExtractedEntity,
+    SourceEvidence,
     SupersessionStatement,
     load_redaction_rules,
     markdown_paths,
@@ -245,27 +246,50 @@ def _entity_node_id(
     )
 
 
+def _codex_import_record(
+    document: CodexDocument,
+    source_ref: str,
+    source: SourceEvidence,
+    candidate_entities: tuple[CandidateEntity, ...],
+    *,
+    kind: str | None = None,
+    signal: str | None = None,
+) -> ImportRecord:
+    metadata = {
+        "role": source.role,
+        "text": source.text,
+        "source_content_hash": document.source_content_hash,
+    }
+    if kind is not None:
+        metadata["kind"] = kind
+    provenance = {
+        "line": source.line_number,
+        "path": document.relative_path,
+    }
+    if source.role is not None:
+        provenance["role"] = source.role
+    if signal is not None:
+        provenance["signal"] = signal
+    return ImportRecord(
+        source_kind="codex_logs",
+        source_ref=source_ref,
+        occurred_at=document.occurred_at,
+        raw_text_or_metadata=metadata,
+        candidate_entities=candidate_entities,
+        provenance=provenance,
+    )
+
+
 def _record_for(
     document: CodexDocument,
     entity: ExtractedEntity,
     source_ref: str,
 ) -> ImportRecord:
-    return ImportRecord(
-        source_kind="codex_logs",
-        source_ref=source_ref,
-        occurred_at=document.occurred_at,
-        raw_text_or_metadata={
-            "role": entity.role,
-            "text": entity.excerpt,
-            "source_content_hash": document.source_content_hash,
-        },
-        candidate_entities=(
-            CandidateEntity(entity.type.value, entity.canonical_name),
-        ),
-        provenance={
-            "line": entity.line_number,
-            "path": document.relative_path,
-        },
+    return _codex_import_record(
+        document,
+        source_ref,
+        entity.source,
+        (CandidateEntity(entity.type.value, entity.canonical_name),),
     )
 
 
@@ -273,24 +297,15 @@ def _record_for_message(
     document: CodexDocument,
     message: CodexMessage,
 ) -> ImportRecord:
-    return ImportRecord(
-        source_kind="codex_logs",
-        source_ref=f"codex://{document.relative_path}#L{message.line_number}",
-        occurred_at=document.occurred_at,
-        raw_text_or_metadata={
-            "kind": "message",
-            "role": message.role,
-            "text": message.text,
-            "source_content_hash": document.source_content_hash,
-        },
-        candidate_entities=(
+    source_ref = f"codex://{document.relative_path}#L{message.line_number}"
+    return _codex_import_record(
+        document,
+        source_ref,
+        message.source,
+        (
             CandidateEntity(EntityType.CONVERSATION.value, document.title),
         ),
-        provenance={
-            "line": message.line_number,
-            "path": document.relative_path,
-            "role": message.role,
-        },
+        kind="message",
     )
 
 
@@ -459,9 +474,11 @@ def _upsert_supersession(
             ExtractedEntity(
                 statement.type,
                 statement.replaced_name,
-                statement.line_number,
-                statement.excerpt,
-                statement.role,
+                SourceEvidence(
+                    statement.line_number,
+                    statement.excerpt,
+                    statement.role,
+                ),
             ),
             document.occurred_at,
         )
@@ -473,24 +490,15 @@ def _upsert_supersession(
         replaced_id,
     )
     source_ref = f"codex://{document.relative_path}#L{statement.line_number}"
-    record = ImportRecord(
-        source_kind="codex_logs",
-        source_ref=source_ref,
-        occurred_at=document.occurred_at,
-        raw_text_or_metadata={
-            "role": statement.role,
-            "text": statement.excerpt,
-            "source_content_hash": document.source_content_hash,
-        },
-        candidate_entities=(
+    record = _codex_import_record(
+        document,
+        source_ref,
+        statement.source,
+        (
             CandidateEntity(statement.type.value, statement.replacement_name),
             CandidateEntity(statement.type.value, statement.replaced_name),
         ),
-        provenance={
-            "line": statement.line_number,
-            "path": document.relative_path,
-            "signal": "explicit_replacement",
-        },
+        signal="explicit_replacement",
     )
     _upsert_import_record(
         connection,

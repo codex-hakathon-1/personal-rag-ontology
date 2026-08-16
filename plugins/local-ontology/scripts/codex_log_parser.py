@@ -31,7 +31,8 @@ STANDALONE_REPLACEMENT_PATTERN = re.compile(
 )
 INLINE_REPLACEMENT_PATTERN = re.compile(
     r"^(.+?)\s+(?:explicitly\s+)?replaces\s+(?:the\s+)?"
-    r"(?:decision\s+|plan\s+)?(?:[\"“'](.+?)[\"”']|(.+?))\.?\s*$",
+    r"(?:(?:decision|plan)\s+(?:[\"“']?(.+?)[\"”']?)|"
+    r"[\"“'](.+?)[\"”'])\.?\s*$",
     re.IGNORECASE,
 )
 KEY_LIKE_PATTERN = re.compile(
@@ -52,19 +53,47 @@ TOKEN_LIKE_PATTERNS = (
 
 
 @dataclass(frozen=True)
-class ExtractedEntity:
-    type: EntityType
-    canonical_name: str
+class SourceEvidence:
     line_number: int
-    excerpt: str
+    text: str
     role: str | None
 
 
 @dataclass(frozen=True)
+class ExtractedEntity:
+    type: EntityType
+    canonical_name: str
+    source: SourceEvidence
+
+    @property
+    def line_number(self) -> int:
+        return self.source.line_number
+
+    @property
+    def excerpt(self) -> str:
+        return self.source.text
+
+    @property
+    def role(self) -> str | None:
+        return self.source.role
+
+
+@dataclass(frozen=True)
 class CodexMessage:
-    role: str
-    line_number: int
-    text: str
+    source: SourceEvidence
+
+    @property
+    def line_number(self) -> int:
+        return self.source.line_number
+
+    @property
+    def text(self) -> str:
+        return self.source.text
+
+    @property
+    def role(self) -> str:
+        assert self.source.role is not None
+        return self.source.role
 
 
 @dataclass(frozen=True)
@@ -72,9 +101,19 @@ class SupersessionStatement:
     type: EntityType
     replacement_name: str
     replaced_name: str
-    line_number: int
-    excerpt: str
-    role: str | None
+    source: SourceEvidence
+
+    @property
+    def line_number(self) -> int:
+        return self.source.line_number
+
+    @property
+    def excerpt(self) -> str:
+        return self.source.text
+
+    @property
+    def role(self) -> str | None:
+        return self.source.role
 
 
 @dataclass(frozen=True)
@@ -208,7 +247,11 @@ def parse_document(
         raise ValueError(f"Codex log requires a frontmatter date: {path}")
     occurred_at = _normalized_instant(date_value, path)
     entities: list[ExtractedEntity] = [
-        ExtractedEntity(EntityType.CONVERSATION, title, 1, title, None)
+        ExtractedEntity(
+            EntityType.CONVERSATION,
+            title,
+            SourceEvidence(1, title, None),
+        )
     ]
     topics_line = next(
         (
@@ -219,7 +262,11 @@ def parse_document(
         1,
     )
     entities.extend(
-        ExtractedEntity(EntityType.TOPIC, topic, topics_line, topic, None)
+        ExtractedEntity(
+            EntityType.TOPIC,
+            topic,
+            SourceEvidence(topics_line, topic, None),
+        )
         for topic in _frontmatter_topics(metadata.get("topics", ""))
     )
     role: str | None = None
@@ -235,9 +282,11 @@ def parse_document(
         if role is not None and meaningful:
             messages.append(
                 CodexMessage(
-                    role,
-                    meaningful[0][0],
-                    "\n".join(line for _, line in meaningful).strip(),
+                    SourceEvidence(
+                        meaningful[0][0],
+                        "\n".join(line for _, line in meaningful).strip(),
+                        role,
+                    )
                 )
             )
         message_lines = []
@@ -267,9 +316,7 @@ def parse_document(
             entity = ExtractedEntity(
                 entity_type,
                 canonical_name,
-                line_number,
-                line.strip(),
-                role,
+                SourceEvidence(line_number, line.strip(), role),
             )
             entities.append(entity)
             if entity_type in {EntityType.DECISION, EntityType.PLAN}:
@@ -281,9 +328,7 @@ def parse_document(
                             entity_type,
                             entity.canonical_name,
                             _replacement_target(inline_replacement),
-                            line_number,
-                            line.strip(),
-                            role,
+                            SourceEvidence(line_number, line.strip(), role),
                         )
                     )
             continue
@@ -302,9 +347,7 @@ def parse_document(
                         replacement.type,
                         replacement.canonical_name,
                         _replacement_target(replacement_match),
-                        line_number,
-                        line.strip(),
-                        role,
+                        SourceEvidence(line_number, line.strip(), role),
                     )
                 )
     flush_message()
