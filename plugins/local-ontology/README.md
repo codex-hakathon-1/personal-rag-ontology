@@ -113,10 +113,11 @@ The Google Maps importer intentionally supports one legacy Takeout layout only:
         └── Saved Places.json
 ```
 
-`Saved Places.json` must be a GeoJSON `FeatureCollection`. Each supported feature requires
-`properties.Location.Business Name`, an `https://www.google.com/maps/` URL in
-`properties.Google Maps URL`, and an RFC 3339 `properties.Published` timestamp.
-`properties.Location.Address` is optional. The distributable fixture at
+`Saved Places.json` must be a GeoJSON `FeatureCollection`. Each member must be a GeoJSON `Feature`
+with Point or null geometry and requires `properties.Location.Business Name`, an
+`https://www.google.com/maps/` URL in `properties.Google Maps URL`, and an RFC 3339
+`properties.Published` timestamp. `properties.Location.Address` is optional. The distributable
+fixture at
 `examples/google-maps-takeout-fixture` is the exact supported contract. Google now documents
 saved-list exports under the separate **Saved** Takeout product, so exports with a different
 product name, CSV files, zip files, Timeline data, reviews, and other Maps layouts are not accepted

@@ -8,6 +8,7 @@ from contextlib import closing
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 from pathlib import Path
 import re
 import sqlite3
@@ -90,6 +91,35 @@ def _record_from_feature(
 ) -> tuple[ImportRecord, str, list[str]]:
     if not isinstance(feature, dict):
         raise ValueError("feature must be an object")
+    if feature.get("type") != "Feature":
+        raise ValueError("feature.type must be 'Feature'")
+    if "geometry" not in feature:
+        raise ValueError("feature.geometry must be a GeoJSON Point or null")
+    geometry = feature["geometry"]
+    if geometry is not None:
+        coordinates = (
+            geometry.get("coordinates")
+            if isinstance(geometry, dict)
+            else None
+        )
+        valid_coordinates = (
+            isinstance(coordinates, list)
+            and len(coordinates) in (2, 3)
+            and all(
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(value)
+                for value in coordinates
+            )
+        )
+        if (
+            not isinstance(geometry, dict)
+            or geometry.get("type") != "Point"
+            or not valid_coordinates
+        ):
+            raise ValueError(
+                "feature.geometry must be a GeoJSON Point or null"
+            )
     properties = feature.get("properties")
     if not isinstance(properties, dict):
         raise ValueError("properties must be an object")

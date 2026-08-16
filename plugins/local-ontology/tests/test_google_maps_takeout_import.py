@@ -75,6 +75,18 @@ class GoogleMapsTakeoutImportTest(unittest.TestCase):
                             "properties.Published must be an RFC 3339 timestamp"
                         ),
                     },
+                    {
+                        "path": SAVED_PLACES_PATH,
+                        "recordIndex": 5,
+                        "reason": "feature.type must be 'Feature'",
+                    },
+                    {
+                        "path": SAVED_PLACES_PATH,
+                        "recordIndex": 6,
+                        "reason": (
+                            "feature.geometry must be a GeoJSON Point or null"
+                        ),
+                    },
                 ],
                 "skippedPaths": [
                     {
