@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 import sqlite3
 from typing import Any
+import uuid
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
@@ -134,7 +135,11 @@ def build_session(
     policy_path: Path,
     selected_world: str,
     session_directory: Path,
+    max_rows: int = 100,
+    max_execution_ms: int = 1_000,
 ) -> Path:
+    if max_rows <= 0 or max_execution_ms <= 0:
+        raise ValueError("Query limits must be positive integers")
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
     policies = json.loads(policy_path.read_text(encoding="utf-8")).get("worlds", {})
     if selected_world not in policies:
@@ -148,10 +153,19 @@ def build_session(
     session_path = session_directory / "session.json"
     _build_canonical(canonical_path, fixture)
 
+    session_identifier = uuid.uuid4().hex
     session = {
+        "sessionIdentifier": session_identifier,
         "selectedWorld": selected_world,
         "policyContract": policies[selected_world],
         "canonicalDatabase": str(canonical_path),
+        "queryAuditLog": str(
+            session_directory / f"query-audit-{session_identifier}.jsonl"
+        ),
+        "queryLimits": {
+            "maxRows": max_rows,
+            "maxExecutionMs": max_execution_ms,
+        },
         "schemaGuidance": {
             "nodes": list(TABLE_COLUMNS["nodes"]),
             "node_aliases": list(TABLE_COLUMNS["node_aliases"]),
@@ -169,12 +183,16 @@ def main() -> None:
     parser.add_argument("--policy", type=Path, required=True)
     parser.add_argument("--world", required=True)
     parser.add_argument("--session-dir", type=Path, required=True)
+    parser.add_argument("--max-rows", type=int, default=100)
+    parser.add_argument("--max-execution-ms", type=int, default=1_000)
     arguments = parser.parse_args()
     session_path = build_session(
         arguments.fixture,
         arguments.policy,
         arguments.world,
         arguments.session_dir,
+        arguments.max_rows,
+        arguments.max_execution_ms,
     )
     session = json.loads(session_path.read_text(encoding="utf-8"))
     print(json.dumps({

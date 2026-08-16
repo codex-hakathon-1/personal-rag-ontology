@@ -11,7 +11,7 @@ import sys
 from typing import Any
 
 from build_session import build_capability_connection
-from query_harness import QueryRejected, query
+from query_harness import QueryAuditContext, QueryRejected, query
 
 
 PROTOCOL_VERSION = "2025-06-18"
@@ -110,9 +110,17 @@ def handle(
         if parameters.get("name") != "query_memory":
             return _error(identifier, -32602, "Unknown tool")
         try:
+            limits = session["queryLimits"]
             result = query(
                 capability,
                 parameters.get("arguments", {}).get("sql", ""),
+                max_rows=limits["maxRows"],
+                max_execution_ms=limits["maxExecutionMs"],
+                audit_context=QueryAuditContext(
+                    path=Path(session["queryAuditLog"]),
+                    session_identifier=session["sessionIdentifier"],
+                    world_identifier=session["selectedWorld"],
+                ),
             )
         except QueryRejected as error:
             return _success(identifier, {

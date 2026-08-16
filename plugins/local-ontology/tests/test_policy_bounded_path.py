@@ -31,6 +31,10 @@ class PolicyBoundedSqlPathTest(unittest.TestCase):
                     "travel",
                     "--session-dir",
                     str(session_directory),
+                    "--max-rows",
+                    "1",
+                    "--max-execution-ms",
+                    "250",
                 ],
                 check=True,
                 capture_output=True,
@@ -38,6 +42,7 @@ class PolicyBoundedSqlPathTest(unittest.TestCase):
             )
             build_result = json.loads(build.stdout)
             session_path = Path(build_result["sessionPath"])
+            session = json.loads(session_path.read_text(encoding="utf-8"))
 
             self.assertEqual(build_result["selectedWorld"], "travel")
             self.assertNotIn(ALLOWED_FACT, build.stdout)
@@ -117,7 +122,60 @@ class PolicyBoundedSqlPathTest(unittest.TestCase):
             )
             self.assertEqual(result["rowCount"], 1)
             self.assertFalse(result["truncated"])
-            self.assertEqual(result["maxRows"], 100)
+            self.assertEqual(result["maxRows"], 1)
+
+            canonical_path = session["canonicalDatabase"].replace("'", "''")
+            attach = self._request(
+                server,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "query_memory",
+                        "arguments": {
+                            "sql": (
+                                f"ATTACH DATABASE '{canonical_path}' AS canonical"
+                            )
+                        },
+                    },
+                },
+            )
+            canonical_read = self._request(
+                server,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 5,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "query_memory",
+                        "arguments": {"sql": "SELECT * FROM canonical.nodes"},
+                    },
+                },
+            )
+
+            self.assertTrue(attach["result"]["isError"])
+            self.assertTrue(canonical_read["result"]["isError"])
+
+            audit_path = Path(session["queryAuditLog"])
+            audit_text = audit_path.read_text(encoding="utf-8")
+            audit_entries = [json.loads(line) for line in audit_text.splitlines()]
+            self.assertEqual(len(audit_entries), 3)
+            self.assertEqual(
+                [entry["outcome"] for entry in audit_entries],
+                ["succeeded", "rejected", "rejected"],
+            )
+            for entry in audit_entries:
+                self.assertEqual(
+                    entry["sessionIdentifier"], session["sessionIdentifier"]
+                )
+                self.assertEqual(entry["worldIdentifier"], "travel")
+            self.assertNotIn(ALLOWED_FACT, audit_text)
+            self.assertNotIn("ATTACH DATABASE", audit_text)
+            self.assertEqual(
+                session["queryLimits"],
+                {"maxRows": 1, "maxExecutionMs": 250},
+            )
 
     @staticmethod
     def _request(server, request):
