@@ -1,6 +1,6 @@
 {
   "name": "local-ontology",
-  "version": "0.1.0+codex.20260816063121",
+  "version": "0.1.0+codex.20260816064215",
   "description": "Query a local, policy-bounded SQLite memory graph on demand.",
   "author": {
     "name": "Local developer"

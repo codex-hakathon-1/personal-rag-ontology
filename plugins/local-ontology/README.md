@@ -75,10 +75,11 @@ hashes make unchanged re-imports idempotent. The supported fixture schema is doc
 
 Codex logs use UTF-8 Markdown with `title`, `date`, and optional `topics` frontmatter. The
 deterministic MVP extractor recognizes `## User` and `## Assistant` message headings plus
-`Decision:`, `Plan:`, and `Topic:` lines. A sentence immediately following a decision or plan in
-the form `This decision replaces "..."` or `This plan replaces "..."` emits a `supersedes` edge
-with `0.99` confidence and marks only the named older node as superseded. A newer claim without
-that explicit language remains active.
+`Decision:`, `Plan:`, and `Topic:` lines. Explicit forms such as `This replaces ...`,
+`This decision replaces "..."`, and `Decision: New choice replaces "Old choice"` emit a
+`supersedes` edge with `0.99` confidence and mark only the named older node as superseded. A newer
+claim without that explicit language remains active. User and Assistant message bodies are also
+retained as normalized, redacted conversation evidence.
 
 ```powershell
 python plugins/local-ontology/scripts/import_codex_logs.py `

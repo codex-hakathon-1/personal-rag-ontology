@@ -5,116 +5,28 @@ from __future__ import annotations
 
 import argparse
 from contextlib import closing
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
-import re
 import sqlite3
 from typing import Any
 
+from codex_log_parser import (
+    CodexDocument,
+    CodexMessage,
+    EntityType,
+    ExtractedEntity,
+    SupersessionStatement,
+    load_redaction_rules,
+    markdown_paths,
+    parse_document,
+)
 from import_records import CandidateEntity, ImportRecord
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_SCHEMA = PLUGIN_ROOT / "schema" / "canonical.sql"
 IMPORT_RECORD_SCHEMA = PLUGIN_ROOT / "schema" / "import_records.sql"
-CLAIM_PATTERN = re.compile(
-    r"^\s*(?:#{1,6}\s*)?(?:\*\*)?(Decision|Plan|Topic)(?:\*\*)?\s*:\s*(.+?)\s*$",
-    re.IGNORECASE,
-)
-ROLE_PATTERN = re.compile(r"^#{1,6}\s+(User|Assistant)\s*$", re.IGNORECASE)
-REPLACEMENT_PATTERN = re.compile(
-    r"^\s*(?:This|That|The|It)\s+(decision|plan)\s+"
-    r"(?:explicitly\s+)?replaces\s+[\"“'](.+?)[\"”']\.?\s*$",
-    re.IGNORECASE,
-)
-KEY_LIKE_PATTERN = re.compile(
-    r"(?i)\b((?:api[_-]?)?(?:key|token|secret|password|passwd|pwd)"
-    r"[a-z0-9_-]*\s*[:=]\s*)([^\s\"'`,;]+)"
-)
-TOKEN_LIKE_PATTERNS = (
-    re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{16,}\b"),
-    re.compile(r"\b(?:ghp|gho|ghu|ghs|github_pat)_[A-Za-z0-9_]{16,}\b"),
-    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~-]{16,}"),
-)
-
-
-@dataclass(frozen=True)
-class ExtractedEntity:
-    type: str
-    canonical_name: str
-    line_number: int
-    excerpt: str
-    role: str | None
-
-
-@dataclass(frozen=True)
-class SupersessionStatement:
-    type: str
-    replacement_name: str
-    replaced_name: str
-    line_number: int
-    excerpt: str
-    role: str | None
-
-
-@dataclass(frozen=True)
-class CodexDocument:
-    path: Path
-    relative_path: str
-    title: str
-    occurred_at: str
-    source_content_hash: str
-    redacted_markdown: str
-    entities: tuple[ExtractedEntity, ...]
-    supersessions: tuple[SupersessionStatement, ...]
-    redactions: dict[str, int]
-
-
-@dataclass(frozen=True)
-class RedactionRules:
-    secret_paths: tuple[str, ...]
-
-
-def _load_redaction_rules(path: Path | None) -> RedactionRules:
-    if path is None:
-        return RedactionRules(())
-    document = json.loads(path.read_text(encoding="utf-8"))
-    values = document.get("secret_paths", [])
-    if not isinstance(values, list) or not all(
-        isinstance(value, str) and value for value in values
-    ):
-        raise ValueError("secret_paths must be a list of non-empty strings")
-    return RedactionRules(tuple(values))
-
-
-def _redact(text: str, rules: RedactionRules) -> tuple[str, dict[str, int]]:
-    counts = {
-        "configured_secret_path": 0,
-        "key_like_value": 0,
-        "token_like_value": 0,
-    }
-    redacted = text
-    for secret_path in sorted(rules.secret_paths, key=len, reverse=True):
-        redacted, replacements = re.subn(
-            re.escape(secret_path),
-            "[REDACTED]",
-            redacted,
-            flags=re.IGNORECASE,
-        )
-        counts["configured_secret_path"] += replacements
-
-    def replace_key_like(match: re.Match[str]) -> str:
-        counts["key_like_value"] += 1
-        return f"{match.group(1)}[REDACTED]"
-
-    redacted = KEY_LIKE_PATTERN.sub(replace_key_like, redacted)
-    for pattern in TOKEN_LIKE_PATTERNS:
-        redacted, replacements = pattern.subn("[REDACTED]", redacted)
-        counts["token_like_value"] += replacements
-    return redacted, counts
 
 
 def _digest(*parts: str) -> str:
@@ -127,139 +39,6 @@ def _identifier(kind: str, *parts: str) -> str:
 
 def _fact_key(value: str) -> str:
     return value.strip().strip("\"'“”").rstrip(".!?").strip().casefold()
-
-
-def _normalized_instant(value: str, path: Path) -> str:
-    candidate = value.strip().strip('"\'')
-    try:
-        instant = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
-    except ValueError as error:
-        raise ValueError(f"Invalid Codex log date in {path}: {value!r}") from error
-    if instant.tzinfo is None:
-        instant = instant.replace(tzinfo=timezone.utc)
-    return instant.astimezone(timezone.utc).isoformat(timespec="seconds").replace(
-        "+00:00", "Z"
-    )
-
-
-def _parse_frontmatter(lines: list[str]) -> tuple[dict[str, str], int]:
-    if not lines or lines[0].strip() != "---":
-        return {}, 0
-    metadata: dict[str, str] = {}
-    for index, line in enumerate(lines[1:], start=1):
-        if line.strip() == "---":
-            return metadata, index + 1
-        key, separator, value = line.partition(":")
-        if separator:
-            metadata[key.strip().lower()] = value.strip()
-    return {}, 0
-
-
-def _frontmatter_topics(value: str) -> tuple[str, ...]:
-    candidate = value.strip()
-    if candidate.startswith("[") and candidate.endswith("]"):
-        candidate = candidate[1:-1]
-    return tuple(
-        topic.strip().strip('"\'')
-        for topic in candidate.split(",")
-        if topic.strip().strip('"\'')
-    )
-
-
-def _markdown_paths(logs_path: Path) -> tuple[Path, tuple[Path, ...]]:
-    resolved = logs_path.resolve()
-    if resolved.is_file():
-        if resolved.suffix.lower() not in {".md", ".markdown"}:
-            raise ValueError(f"Codex log must be Markdown: {resolved}")
-        return resolved.parent, (resolved,)
-    if not resolved.is_dir():
-        raise FileNotFoundError(f"Codex logs path does not exist: {resolved}")
-    paths = tuple(
-        sorted(
-            path
-            for path in resolved.rglob("*")
-            if path.is_file() and path.suffix.lower() in {".md", ".markdown"}
-        )
-    )
-    return resolved, paths
-
-
-def _parse_document(
-    path: Path,
-    root: Path,
-    redaction_rules: RedactionRules,
-) -> CodexDocument:
-    original = path.read_text(encoding="utf-8")
-    redacted, redactions = _redact(original, redaction_rules)
-    lines = redacted.splitlines()
-    metadata, body_start = _parse_frontmatter(lines)
-    title = metadata.get("title") or path.stem.replace("-", " ").title()
-    date_value = metadata.get("date") or metadata.get("created_at")
-    if not date_value:
-        raise ValueError(f"Codex log requires a frontmatter date: {path}")
-    occurred_at = _normalized_instant(date_value, path)
-    entities: list[ExtractedEntity] = [
-        ExtractedEntity("conversation", title, 1, title, None)
-    ]
-    topics_line = next(
-        (
-            index
-            for index, line in enumerate(lines[:body_start], start=1)
-            if line.lower().startswith("topics:")
-        ),
-        1,
-    )
-    entities.extend(
-        ExtractedEntity("topic", topic, topics_line, topic, None)
-        for topic in _frontmatter_topics(metadata.get("topics", ""))
-    )
-    role: str | None = None
-    latest_claim: dict[str, ExtractedEntity] = {}
-    supersessions: list[SupersessionStatement] = []
-    for line_number, line in enumerate(lines[body_start:], start=body_start + 1):
-        role_match = ROLE_PATTERN.match(line)
-        if role_match:
-            role = role_match.group(1).lower()
-            continue
-        claim_match = CLAIM_PATTERN.match(line)
-        if claim_match:
-            entity = ExtractedEntity(
-                claim_match.group(1).lower(),
-                claim_match.group(2).strip(),
-                line_number,
-                line.strip(),
-                role,
-            )
-            entities.append(entity)
-            if entity.type in {"decision", "plan"}:
-                latest_claim[entity.type] = entity
-            continue
-        replacement_match = REPLACEMENT_PATTERN.match(line)
-        if replacement_match:
-            claim_type = replacement_match.group(1).lower()
-            replacement = latest_claim.get(claim_type)
-            if replacement is not None:
-                supersessions.append(
-                    SupersessionStatement(
-                        claim_type,
-                        replacement.canonical_name,
-                        replacement_match.group(2).strip(),
-                        line_number,
-                        line.strip(),
-                        role,
-                    )
-                )
-    return CodexDocument(
-        path=path,
-        relative_path=path.relative_to(root).as_posix(),
-        title=title,
-        occurred_at=occurred_at,
-        source_content_hash=hashlib.sha256(original.encode("utf-8")).hexdigest(),
-        redacted_markdown=redacted,
-        entities=tuple(entities),
-        supersessions=tuple(supersessions),
-        redactions=redactions,
-    )
 
 
 def _initialize_canonical(connection: sqlite3.Connection) -> None:
@@ -316,6 +95,11 @@ def _remove_previous_document(
         """,
         tuple(previous_edge_ids),
     ).fetchall()
+    previous_node_ids.update(
+        node_id
+        for endpoints in superseded_targets
+        for node_id in endpoints
+    )
     conversation_id = _identifier(
         "conversation",
         world_id,
@@ -352,23 +136,33 @@ def _remove_previous_document(
             f"DELETE FROM edges WHERE edge_id IN ({edge_placeholders})",
             tuple(previous_edge_ids),
         )
-    for replacement_id, replaced_id in superseded_targets:
-        still_superseded = connection.execute(
+    for _, replaced_id in superseded_targets:
+        remaining_replacement = connection.execute(
             """
-            SELECT 1 FROM edges
+            SELECT from_node_id FROM edges
             WHERE relation = 'supersedes' AND to_node_id = ? AND state = 'active'
+            ORDER BY valid_from DESC, edge_id DESC
             LIMIT 1
             """,
             (replaced_id,),
         ).fetchone()
-        if still_superseded is None:
+        if remaining_replacement is None:
             connection.execute(
                 """
                 UPDATE nodes
                 SET state = 'active', superseded_by = NULL
-                WHERE node_id = ? AND superseded_by = ?
+                WHERE node_id = ?
                 """,
-                (replaced_id, replacement_id),
+                (replaced_id,),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE nodes
+                SET state = 'superseded', superseded_by = ?
+                WHERE node_id = ?
+                """,
+                (remaining_replacement[0], replaced_id),
             )
     for node_id in previous_node_ids:
         connection.execute(
@@ -401,7 +195,7 @@ def _upsert_node(
 ) -> None:
     summary = (
         f"Codex conversation: {entity.canonical_name}"
-        if entity.type == "conversation"
+        if entity.type is EntityType.CONVERSATION
         else entity.canonical_name
     )
     connection.execute(
@@ -421,7 +215,7 @@ def _upsert_node(
         (
             node_id,
             world_id,
-            entity.type,
+            entity.type.value,
             entity.canonical_name,
             summary,
             occurred_at,
@@ -437,15 +231,15 @@ def _entity_node_id(
     document: CodexDocument,
     entity: ExtractedEntity,
 ) -> str:
-    if entity.type == "conversation":
+    if entity.type is EntityType.CONVERSATION:
         return _identifier("conversation", world_id, document.relative_path)
     identity = (
         _fact_key(entity.canonical_name)
-        if entity.type in {"decision", "plan"}
+        if entity.type in {EntityType.DECISION, EntityType.PLAN}
         else entity.canonical_name.casefold()
     )
     return _identifier(
-        entity.type,
+        entity.type.value,
         world_id,
         identity,
     )
@@ -466,7 +260,7 @@ def _record_for(
             "source_content_hash": document.source_content_hash,
         },
         candidate_entities=(
-            CandidateEntity(entity.type, entity.canonical_name),
+            CandidateEntity(entity.type.value, entity.canonical_name),
         ),
         provenance={
             "line": entity.line_number,
@@ -475,18 +269,42 @@ def _record_for(
     )
 
 
+def _record_for_message(
+    document: CodexDocument,
+    message: CodexMessage,
+) -> ImportRecord:
+    return ImportRecord(
+        source_kind="codex_logs",
+        source_ref=f"codex://{document.relative_path}#L{message.line_number}",
+        occurred_at=document.occurred_at,
+        raw_text_or_metadata={
+            "kind": "message",
+            "role": message.role,
+            "text": message.text,
+            "source_content_hash": document.source_content_hash,
+        },
+        candidate_entities=(
+            CandidateEntity(EntityType.CONVERSATION.value, document.title),
+        ),
+        provenance={
+            "line": message.line_number,
+            "path": document.relative_path,
+            "role": message.role,
+        },
+    )
+
+
 def _upsert_import_record(
     connection: sqlite3.Connection,
     world_id: str,
     record: ImportRecord,
-    entity: ExtractedEntity,
+    *identity_parts: str,
 ) -> None:
     record_id = _identifier(
         "import-record",
         world_id,
         record.source_ref,
-        entity.type,
-        entity.canonical_name.casefold(),
+        *identity_parts,
     )
     connection.execute(
         """
@@ -515,41 +333,65 @@ def _upsert_import_record(
     )
 
 
-def _upsert_evidence(
+def _upsert_evidence_row(
     connection: sqlite3.Connection,
-    world_id: str,
-    node_id: str,
-    record: ImportRecord,
-    entity: ExtractedEntity,
+    evidence_id: str,
+    node_id: str | None,
+    edge_id: str | None,
+    source_ref: str,
+    occurred_at: str,
+    excerpt: str,
+    content_hash: str,
 ) -> None:
     connection.execute(
         """
         INSERT INTO evidence (
           evidence_id, node_id, edge_id, source_kind, source_ref,
           occurred_at, observed_at, excerpt, content_hash
-        ) VALUES (?, ?, NULL, 'codex_logs', ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, 'codex_logs', ?, ?, ?, ?, ?)
         ON CONFLICT(evidence_id) DO UPDATE SET
           node_id = excluded.node_id,
+          edge_id = excluded.edge_id,
           occurred_at = excluded.occurred_at,
           observed_at = excluded.observed_at,
           excerpt = excluded.excerpt,
           content_hash = excluded.content_hash
         """,
         (
-            _identifier(
-                "evidence",
-                world_id,
-                record.source_ref,
-                entity.type,
-                entity.canonical_name.casefold(),
-            ),
+            evidence_id,
             node_id,
-            record.source_ref,
-            record.occurred_at,
-            record.occurred_at,
-            entity.excerpt,
-            record.content_hash(),
+            edge_id,
+            source_ref,
+            occurred_at,
+            occurred_at,
+            excerpt,
+            content_hash,
         ),
+    )
+
+
+def _upsert_entity_evidence(
+    connection: sqlite3.Connection,
+    world_id: str,
+    node_id: str,
+    record: ImportRecord,
+    entity: ExtractedEntity,
+) -> None:
+    _upsert_evidence_row(
+        connection,
+        _identifier(
+            "evidence",
+            world_id,
+            record.source_ref,
+            entity.type.value,
+            entity.canonical_name.casefold(),
+        ),
+        node_id,
+        None,
+        record.source_ref,
+        record.occurred_at,
+        entity.excerpt,
+        record.content_hash(),
     )
 
 
@@ -590,21 +432,39 @@ def _upsert_supersession(
     statement: SupersessionStatement,
 ) -> bool:
     replacement_id = _identifier(
-        statement.type,
+        statement.type.value,
         world_id,
         _fact_key(statement.replacement_name),
     )
     replaced_id = _identifier(
-        statement.type,
+        statement.type.value,
         world_id,
         _fact_key(statement.replaced_name),
     )
-    present = connection.execute(
-        "SELECT node_id FROM nodes WHERE node_id IN (?, ?)",
-        (replacement_id, replaced_id),
-    ).fetchall()
-    if {row[0] for row in present} != {replacement_id, replaced_id}:
+    replacement_present = connection.execute(
+        "SELECT 1 FROM nodes WHERE node_id = ?",
+        (replacement_id,),
+    ).fetchone()
+    if replacement_present is None:
         return False
+    replaced_present = connection.execute(
+        "SELECT 1 FROM nodes WHERE node_id = ?",
+        (replaced_id,),
+    ).fetchone()
+    if replaced_present is None:
+        _upsert_node(
+            connection,
+            replaced_id,
+            world_id,
+            ExtractedEntity(
+                statement.type,
+                statement.replaced_name,
+                statement.line_number,
+                statement.excerpt,
+                statement.role,
+            ),
+            document.occurred_at,
+        )
     edge_id = _identifier(
         "edge",
         world_id,
@@ -623,8 +483,8 @@ def _upsert_supersession(
             "source_content_hash": document.source_content_hash,
         },
         candidate_entities=(
-            CandidateEntity(statement.type, statement.replacement_name),
-            CandidateEntity(statement.type, statement.replaced_name),
+            CandidateEntity(statement.type.value, statement.replacement_name),
+            CandidateEntity(statement.type.value, statement.replaced_name),
         ),
         provenance={
             "line": statement.line_number,
@@ -632,14 +492,15 @@ def _upsert_supersession(
             "signal": "explicit_replacement",
         },
     )
-    record_identity = ExtractedEntity(
-        statement.type,
-        f"{statement.replacement_name}\x1f{statement.replaced_name}",
-        statement.line_number,
-        statement.excerpt,
-        statement.role,
+    _upsert_import_record(
+        connection,
+        world_id,
+        record,
+        "supersedes",
+        statement.type.value,
+        statement.replacement_name.casefold(),
+        statement.replaced_name.casefold(),
     )
-    _upsert_import_record(connection, world_id, record, record_identity)
     connection.execute(
         """
         INSERT INTO edges (
@@ -662,28 +523,15 @@ def _upsert_supersession(
             document.occurred_at,
         ),
     )
-    connection.execute(
-        """
-        INSERT INTO evidence (
-          evidence_id, node_id, edge_id, source_kind, source_ref,
-          occurred_at, observed_at, excerpt, content_hash
-        ) VALUES (?, NULL, ?, 'codex_logs', ?, ?, ?, ?, ?)
-        ON CONFLICT(evidence_id) DO UPDATE SET
-          edge_id = excluded.edge_id,
-          occurred_at = excluded.occurred_at,
-          observed_at = excluded.observed_at,
-          excerpt = excluded.excerpt,
-          content_hash = excluded.content_hash
-        """,
-        (
-            _identifier("evidence", world_id, source_ref, "supersedes"),
-            edge_id,
-            source_ref,
-            document.occurred_at,
-            document.occurred_at,
-            statement.excerpt,
-            record.content_hash(),
-        ),
+    _upsert_evidence_row(
+        connection,
+        _identifier("evidence", world_id, source_ref, "supersedes"),
+        None,
+        edge_id,
+        source_ref,
+        document.occurred_at,
+        statement.excerpt,
+        record.content_hash(),
     )
     connection.execute(
         """
@@ -702,11 +550,11 @@ def import_codex_logs(
     world_id: str,
     secret_paths_path: Path | None = None,
 ) -> dict[str, Any]:
-    root, paths = _markdown_paths(logs_path)
-    redaction_rules = _load_redaction_rules(secret_paths_path)
+    root, paths = markdown_paths(logs_path)
+    redaction_rules = load_redaction_rules(secret_paths_path)
     documents = tuple(
         sorted(
-            (_parse_document(path, root, redaction_rules) for path in paths),
+            (parse_document(path, root, redaction_rules) for path in paths),
             key=lambda document: (document.occurred_at, document.relative_path),
         )
     )
@@ -732,7 +580,7 @@ def import_codex_logs(
                     node_id = _entity_node_id(world_id, document, entity)
                     source_ref = (
                         f"codex://{document.relative_path}#document"
-                        if entity.type == "conversation"
+                        if entity.type is EntityType.CONVERSATION
                         else f"codex://{document.relative_path}#L{entity.line_number}"
                     )
                     record = _record_for(document, entity, source_ref)
@@ -743,15 +591,21 @@ def import_codex_logs(
                         entity,
                         document.occurred_at,
                     )
-                    _upsert_import_record(connection, world_id, record, entity)
-                    _upsert_evidence(
+                    _upsert_import_record(
+                        connection,
+                        world_id,
+                        record,
+                        entity.type.value,
+                        entity.canonical_name.casefold(),
+                    )
+                    _upsert_entity_evidence(
                         connection,
                         world_id,
                         node_id,
                         record,
                         entity,
                     )
-                    if entity.type != "conversation":
+                    if entity.type is not EntityType.CONVERSATION:
                         _upsert_membership_edge(
                             connection,
                             world_id,
@@ -759,6 +613,31 @@ def import_codex_logs(
                             conversation_id,
                             document.occurred_at,
                         )
+                for message in document.messages:
+                    record = _record_for_message(document, message)
+                    _upsert_import_record(
+                        connection,
+                        world_id,
+                        record,
+                        "message",
+                        message.role,
+                    )
+                    _upsert_evidence_row(
+                        connection,
+                        _identifier(
+                            "evidence",
+                            world_id,
+                            record.source_ref,
+                            "message",
+                            message.role,
+                        ),
+                        conversation_id,
+                        None,
+                        record.source_ref,
+                        record.occurred_at,
+                        message.text,
+                        record.content_hash(),
+                    )
             resolved_supersessions = sum(
                 _upsert_supersession(connection, world_id, document, statement)
                 for document in documents
@@ -767,21 +646,24 @@ def import_codex_logs(
     return {
         "importedConversations": len(documents),
         "importedDecisions": sum(
-            entity.type == "decision"
+            entity.type is EntityType.DECISION
             for document in documents
             for entity in document.entities
         ),
         "importedPlans": sum(
-            entity.type == "plan"
+            entity.type is EntityType.PLAN
             for document in documents
             for entity in document.entities
+        ),
+        "importedMessages": sum(
+            len(document.messages) for document in documents
         ),
         "topicCandidates": len(
             {
                 entity.canonical_name.casefold()
                 for document in documents
                 for entity in document.entities
-                if entity.type == "topic"
+                if entity.type is EntityType.TOPIC
             }
         ),
         "redactions": {

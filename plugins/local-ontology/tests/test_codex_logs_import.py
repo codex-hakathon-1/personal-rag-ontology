@@ -37,6 +37,10 @@ class CodexLogsImportTest(unittest.TestCase):
                     )
                     for entity in json.loads(row[0])
                 }
+                normalized_messages = connection.execute(
+                    "SELECT count(*) FROM import_records "
+                    "WHERE json_extract(raw_text_or_metadata, '$.kind') = 'message'"
+                ).fetchone()[0]
                 provenance = connection.execute(
                     "SELECT source_ref, occurred_at, content_hash "
                     "FROM evidence WHERE source_kind = 'codex_logs' "
@@ -44,6 +48,8 @@ class CodexLogsImportTest(unittest.TestCase):
                 ).fetchall()
 
             self.assertEqual(report["importedConversations"], 3)
+            self.assertEqual(report["importedMessages"], 6)
+            self.assertEqual(normalized_messages, 6)
             self.assertEqual(node_types["conversation"], 3)
             self.assertGreaterEqual(node_types["decision"], 3)
             self.assertGreaterEqual(node_types["plan"], 3)
@@ -64,6 +70,9 @@ class CodexLogsImportTest(unittest.TestCase):
     def test_secrets_are_redacted_before_any_content_is_persisted(self):
         token = "sk-proj-abcdefghijklmnopqrstuvwxyz012345"
         key_value = "ultra-secret-database-password"
+        quoted_key_value = "quoted-secret-value"
+        password_value = "correct horse battery staple"
+        jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signaturevalue"
         secret_path = r"C:\Users\dev\.ssh\id_ed25519"
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -84,9 +93,15 @@ class CodexLogsImportTest(unittest.TestCase):
                         "",
                         "## Assistant",
                         "",
-                        f"Decision: Configure API_KEY={key_value} locally.",
+                        (
+                            f'Decision: Set API_KEY="{quoted_key_value}" and '
+                            f'password: "{password_value}" locally.'
+                        ),
                         "",
-                        f"Plan: Read the key from {secret_path}.",
+                        (
+                            f"Plan: Use DATABASE_PASSWORD={key_value}, then read "
+                            f"{secret_path}; auth proof: {jwt}."
+                        ),
                     ]
                 ),
                 encoding="utf-8",
@@ -111,13 +126,20 @@ class CodexLogsImportTest(unittest.TestCase):
                     row[0] or ""
                     for row in connection.execute("SELECT excerpt FROM evidence")
                 )
-            for secret in (token, key_value, secret_path):
+            for secret in (
+                token,
+                key_value,
+                quoted_key_value,
+                password_value,
+                jwt,
+                secret_path,
+            ):
                 self.assertNotIn(secret, database_dump)
                 self.assertNotIn(secret, excerpts)
             self.assertGreaterEqual(database_dump.count("[REDACTED]"), 2)
             self.assertEqual(report["redactions"]["configured_secret_path"], 1)
-            self.assertGreaterEqual(report["redactions"]["key_like_value"], 1)
-            self.assertGreaterEqual(report["redactions"]["token_like_value"], 1)
+            self.assertGreaterEqual(report["redactions"]["key_like_value"], 3)
+            self.assertGreaterEqual(report["redactions"]["token_like_value"], 2)
 
     def test_only_explicit_replacement_creates_supersession_evidence(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -162,6 +184,62 @@ class CodexLogsImportTest(unittest.TestCase):
             self.assertGreaterEqual(supersession[0]["confidence"], 0.95)
             self.assertRegex(supersession[0]["source_ref"], r"#L\d+$")
             self.assertIn("replaces", supersession[0]["excerpt"])
+
+    def test_inline_replacement_materializes_a_named_older_plan(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            log_path = root / "plan.md"
+            log_path.write_text(
+                "\n".join(
+                    [
+                        "---",
+                        "title: Release plan",
+                        "date: 2025-04-01T10:00:00Z",
+                        "---",
+                        "",
+                        "## Assistant",
+                        "",
+                        'Plan: Ship the beta replaces "Ship the alpha".',
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            canonical_path = root / "canonical.sqlite3"
+
+            report = self._import(log_path, canonical_path)
+
+            with closing(sqlite3.connect(canonical_path)) as connection:
+                plans = connection.execute(
+                    "SELECT canonical_name, state FROM nodes "
+                    "WHERE type = 'plan' ORDER BY canonical_name"
+                ).fetchall()
+                edge_count = connection.execute(
+                    "SELECT count(*) FROM edges WHERE relation = 'supersedes'"
+                ).fetchone()[0]
+            self.assertEqual(
+                plans,
+                [("Ship the alpha", "superseded"), ("Ship the beta", "active")],
+            )
+            self.assertEqual(edge_count, 1)
+            self.assertEqual(report["explicitSupersessions"], 1)
+
+            log_path.write_text(
+                log_path.read_text(encoding="utf-8").replace(
+                    'Plan: Ship the beta replaces "Ship the alpha".',
+                    "Plan: Ship the beta.",
+                ),
+                encoding="utf-8",
+            )
+            self._import(log_path, canonical_path)
+            with closing(sqlite3.connect(canonical_path)) as connection:
+                remaining_plans = connection.execute(
+                    "SELECT canonical_name, state FROM nodes WHERE type = 'plan'"
+                ).fetchall()
+                remaining_edges = connection.execute(
+                    "SELECT count(*) FROM edges WHERE relation = 'supersedes'"
+                ).fetchone()[0]
+            self.assertEqual(remaining_plans, [("Ship the beta.", "active")])
+            self.assertEqual(remaining_edges, 0)
 
     def test_reimport_is_idempotent_and_changed_content_updates_hashes(self):
         source = LOG_FIXTURES / "2025-03-20-review.md"
