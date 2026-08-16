@@ -102,7 +102,15 @@ class StateAndWorldPolicyTest(unittest.TestCase):
                     ),
                 )
 
-    def add_edge(self, edge_id, from_node_id, to_node_id, *, source_kind):
+    def add_alias(self, alias, node_id, *, source):
+        with closing(sqlite3.connect(self.canonical_path)) as connection:
+            with connection:
+                connection.execute(
+                    "INSERT INTO node_aliases VALUES (?, ?, ?, 1.0)",
+                    (alias, node_id, source),
+                )
+
+    def add_edge(self, edge_id, from_node_id, to_node_id, *, source_kind=None):
         with closing(sqlite3.connect(self.canonical_path)) as connection:
             with connection:
                 connection.execute(
@@ -115,15 +123,22 @@ class StateAndWorldPolicyTest(unittest.TestCase):
                     """,
                     (edge_id, from_node_id, to_node_id),
                 )
-        self.add_evidence(
-            f"evidence-{edge_id}",
-            edge_id=edge_id,
-            source_kind=source_kind,
-        )
+        if source_kind is not None:
+            self.add_evidence(
+                f"evidence-{edge_id}",
+                edge_id=edge_id,
+                source_kind=source_kind,
+            )
 
     def test_rebuild_marks_only_plans_older_than_configured_age_as_dormant(self):
         self.add_node("stale-plan", last_seen_at="2025-01-01T00:00:00Z")
         self.add_node("recent-plan", last_seen_at="2025-04-15T00:00:00Z")
+        self.add_node(
+            "unconfigured-event",
+            node_type="event",
+            state="dormant",
+            last_seen_at="2025-01-01T00:00:00Z",
+        )
         rules_path = self.root / "state-rules.json"
         rules_path.write_text(
             json.dumps({"dormant_after_days": {"plan": 90}}),
@@ -151,7 +166,11 @@ class StateAndWorldPolicyTest(unittest.TestCase):
 
         self.assertEqual(
             states,
-            {"stale-plan": "dormant", "recent-plan": "active"},
+            {
+                "recent-plan": "active",
+                "stale-plan": "dormant",
+                "unconfigured-event": "dormant",
+            },
         )
 
     def test_rebuild_supersedes_only_the_fact_named_by_replacement_evidence(self):
@@ -235,6 +254,12 @@ class StateAndWorldPolicyTest(unittest.TestCase):
                 node_id=node_id,
                 source_kind=source,
             )
+        self.add_alias("Allowed alias", "allowed-active", source="codex_logs")
+        self.add_alias(
+            "Denied alias",
+            "allowed-active",
+            source="browser_history",
+        )
         self.add_edge(
             "allowed-edge",
             "allowed-active",
@@ -252,6 +277,11 @@ class StateAndWorldPolicyTest(unittest.TestCase):
             "allowed-active",
             "allowed-dormant",
             source_kind="browser_history",
+        )
+        self.add_edge(
+            "unevidenced-edge",
+            "allowed-active",
+            "allowed-dormant",
         )
         policy = {
             "include_sources": ["codex_logs"],
@@ -281,6 +311,10 @@ class StateAndWorldPolicyTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(sqlite3.OperationalError, "no such table: worlds"):
             capability.execute("SELECT * FROM worlds").fetchall()
+        self.assertEqual(
+            capability.execute("SELECT alias FROM node_aliases").fetchall(),
+            [("Allowed alias",)],
+        )
         self.assertEqual(
             capability.execute("SELECT edge_id FROM edges ORDER BY edge_id").fetchall(),
             [("allowed-edge",)],

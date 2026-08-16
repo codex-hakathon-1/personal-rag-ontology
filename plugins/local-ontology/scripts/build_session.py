@@ -35,6 +35,12 @@ TABLE_COLUMNS = {
         "occurred_at", "observed_at", "excerpt", "content_hash",
     ),
 }
+TABLE_ORDER = {
+    "nodes": "node_id",
+    "node_aliases": "alias, node_id",
+    "edges": "edge_id",
+    "evidence": "evidence_id",
+}
 
 
 @dataclass(frozen=True)
@@ -85,7 +91,12 @@ def build_capability_connection(
     with closing(sqlite3.connect(canonical_uri, uri=True)) as canonical:
         canonical.row_factory = sqlite3.Row
         canonical_rows = {
-            table: [dict(row) for row in canonical.execute(f"SELECT * FROM {table}")]
+            table: [
+                dict(row)
+                for row in canonical.execute(
+                    f"SELECT * FROM {table} ORDER BY {TABLE_ORDER[table]}"
+                )
+            ]
             for table in ("nodes", "node_aliases", "edges", "evidence")
         }
 
@@ -108,9 +119,6 @@ def build_capability_connection(
     ]
     evidenced_nodes = {row["node_id"] for row in eligible_evidence if row.get("node_id")}
     evidenced_edges = {row["edge_id"] for row in eligible_evidence if row.get("edge_id")}
-    edges_with_evidence = {
-        row["edge_id"] for row in canonical_rows["evidence"] if row.get("edge_id")
-    }
     nodes = [
         row for row in canonical_rows["nodes"]
         if row["world_id"] == selected_world
@@ -121,7 +129,9 @@ def build_capability_connection(
     ]
     node_ids = {row["node_id"] for row in nodes}
     aliases = [
-        row for row in canonical_rows["node_aliases"] if row["node_id"] in node_ids
+        row for row in canonical_rows["node_aliases"]
+        if row["node_id"] in node_ids
+        and (included_sources is None or row["source"] in included_sources)
     ]
     edges = [
         row for row in canonical_rows["edges"]
@@ -129,10 +139,7 @@ def build_capability_connection(
         and row["state"] in included_states
         and row["from_node_id"] in node_ids
         and row["to_node_id"] in node_ids
-        and (
-            row["edge_id"] in evidenced_edges
-            or row["edge_id"] not in edges_with_evidence
-        )
+        and row["edge_id"] in evidenced_edges
     ]
     edge_ids = {row["edge_id"] for row in edges}
     evidence = [

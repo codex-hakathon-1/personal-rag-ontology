@@ -175,10 +175,10 @@ replaces an older fact. Re-running unchanged input makes no further changes.
 `build_session.py` requires one configured `--world`; the SQL tool has no world-selection input and
 the capability schema has no `worlds` table. At MCP startup the capability builder copies only nodes
 in that world which have an included evidence source, included state, allowed type, and sensitivity
-outside `deny_sensitivity`. It then copies aliases for those nodes, edges whose endpoints remain and
-whose evidence (when present) includes an allowed source, and only the surviving evidence. Denied
-and other-world records are physically absent. Missing `include_sources` or `allow_node_types` keys
-are unrestricted; an explicitly empty allowlist includes nothing.
+outside `deny_sensitivity`. It then copies aliases from included sources, edges whose endpoints
+remain and whose evidence includes an allowed source, and only the surviving evidence. Denied,
+unevidenced, and other-world records are physically absent. Missing `include_sources` or
+`allow_node_types` keys are unrestricted; an explicitly empty allowlist includes nothing.
 
 ## SQL safety boundary
 

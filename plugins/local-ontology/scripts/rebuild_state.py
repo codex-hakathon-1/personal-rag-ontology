@@ -91,14 +91,13 @@ def rebuild_state(
                     continue
                 threshold = dormant_after_days.get(row["type"])
                 if threshold is None or row["last_seen_at"] is None:
-                    desired_state = "active"
-                else:
-                    last_seen_at = _timestamp(row["last_seen_at"])
-                    desired_state = (
-                        "dormant"
-                        if last_seen_at < reference_time - timedelta(days=threshold)
-                        else "active"
-                    )
+                    continue
+                last_seen_at = _timestamp(row["last_seen_at"])
+                desired_state = (
+                    "dormant"
+                    if last_seen_at < reference_time - timedelta(days=threshold)
+                    else "active"
+                )
                 if row["state"] == desired_state:
                     continue
                 connection.execute(
