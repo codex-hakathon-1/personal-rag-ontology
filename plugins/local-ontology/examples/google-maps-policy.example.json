@@ -1,0 +1,10 @@
+{
+  "worlds": {
+    "travel": {
+      "include_sources": ["google_maps_takeout"],
+      "allow_node_types": ["place", "trip", "event"],
+      "include_states": ["active"],
+      "deny_sensitivity": ["secret", "identity"]
+    }
+  }
+}

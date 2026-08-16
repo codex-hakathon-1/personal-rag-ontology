@@ -102,6 +102,54 @@ possible secret will be recognized. Stored evidence uses stable `codex://<relati
 references and dated content hashes; re-importing a changed source reconciles its old graph rows
 instead of duplicating them.
 
+## Import Google Maps Takeout Saved Places
+
+The Google Maps importer intentionally supports one legacy Takeout layout only:
+
+```text
+<extracted-archive-root>/
+└── Takeout/
+    └── Maps (your places)/
+        └── Saved Places.json
+```
+
+`Saved Places.json` must be a GeoJSON `FeatureCollection`. Each supported feature requires
+`properties.Location.Business Name`, `properties.Google Maps URL`, and an RFC 3339
+`properties.Published` timestamp. `properties.Location.Address` is optional. The distributable
+fixture at `examples/google-maps-takeout-fixture` is the exact supported contract. Google now
+documents saved-list exports under the separate **Saved** Takeout product, so exports with a
+different product name, CSV files, zip files, Timeline data, reviews, and other Maps layouts are
+not accepted as this format. See Google's current
+[saved-list export instructions](https://support.google.com/maps/answer/7280933) and
+[general Takeout instructions](https://support.google.com/accounts/answer/3024190).
+
+Pass the extracted archive root, not the `Takeout` directory or the original zip file:
+
+```powershell
+python plugins/local-ontology/scripts/import_google_maps_takeout.py `
+  --takeout plugins/local-ontology/examples/google-maps-takeout-fixture `
+  --canonical .local-ontology\canonical.sqlite3 `
+  --world travel
+
+python plugins/local-ontology/scripts/build_session.py `
+  --canonical .local-ontology\canonical.sqlite3 `
+  --policy plugins/local-ontology/examples/google-maps-policy.example.json `
+  --world travel `
+  --session-dir .local-ontology-session
+```
+
+Valid features become normalized `import_records`, `place` candidates, nodes, and dated evidence.
+The full source feature remains in `raw_text_or_metadata`; extracted place claims remain separate
+in `candidate_entities` and the graph. The Google Maps URL is the stable `source_ref`, and
+`Published` becomes `occurred_at`. Re-imports update the same stable rows and remove places no
+longer present in the supported file.
+
+The JSON report counts imported files and places. It reports each malformed feature by safe path,
+record index, and reason; reports missing optional addresses as warnings; and classifies every
+other file as `unsupported_archive_path` or `unsupported_takeout_product`. A directory without the
+exact supported path returns `supported_archive_path_not_found` and imports nothing. Reports do
+not include the contents of skipped or malformed records.
+
 ## SQL safety boundary
 
 The query harness accepts one `SELECT` or `WITH` statement, including recursive CTEs, against
