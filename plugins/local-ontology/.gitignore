@@ -1,4 +1,8 @@
 __pycache__/
 *.py[cod]
+*.db
+*.sqlite
 *.sqlite3
 session.json
+query-audit-*.jsonl
+.local-ontology*/
