@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import closing
+from dataclasses import dataclass
 import json
 from pathlib import Path
 import sqlite3
@@ -34,6 +35,19 @@ TABLE_COLUMNS = {
         "occurred_at", "observed_at", "excerpt", "content_hash",
     ),
 }
+
+
+@dataclass(frozen=True)
+class FixtureSource:
+    path: Path
+
+
+@dataclass(frozen=True)
+class CanonicalSource:
+    path: Path
+
+
+SessionSource = FixtureSource | CanonicalSource
 
 
 def _insert_rows(connection: sqlite3.Connection, table: str, rows: list[dict[str, Any]]) -> None:
@@ -131,8 +145,7 @@ def build_capability_connection(
 
 
 def build_session(
-    fixture_path: Path | None,
-    canonical_path: Path | None,
+    source: SessionSource,
     policy_path: Path,
     selected_world: str,
     session_directory: Path,
@@ -148,15 +161,15 @@ def build_session(
     session_directory = session_directory.resolve()
     session_directory.mkdir(parents=True, exist_ok=True)
     session_path = session_directory / "session.json"
-    if fixture_path is not None:
-        fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    if isinstance(source, FixtureSource):
+        fixture = json.loads(source.path.read_text(encoding="utf-8"))
         fixture_worlds = {world["world_id"] for world in fixture.get("worlds", [])}
         if selected_world not in fixture_worlds:
             raise ValueError(f"World {selected_world!r} is not present in the fixture")
         canonical_path = session_directory / "canonical.sqlite3"
         _build_canonical(canonical_path, fixture)
-    elif canonical_path is not None:
-        canonical_path = canonical_path.resolve()
+    else:
+        canonical_path = source.path.resolve()
         canonical_uri = canonical_path.as_uri() + "?mode=ro"
         with closing(sqlite3.connect(canonical_uri, uri=True)) as connection:
             present = connection.execute(
@@ -167,8 +180,6 @@ def build_session(
             raise ValueError(
                 f"World {selected_world!r} is not present in the canonical database"
             )
-    else:
-        raise ValueError("Either a fixture or canonical database is required")
 
     session_identifier = uuid.uuid4().hex
     session = {
@@ -205,9 +216,13 @@ def main() -> None:
     parser.add_argument("--max-rows", type=int, default=100)
     parser.add_argument("--max-execution-ms", type=int, default=1_000)
     arguments = parser.parse_args()
+    session_source: SessionSource
+    if arguments.fixture is not None:
+        session_source = FixtureSource(arguments.fixture)
+    else:
+        session_source = CanonicalSource(arguments.canonical)
     session_path = build_session(
-        arguments.fixture,
-        arguments.canonical,
+        session_source,
         arguments.policy,
         arguments.world,
         arguments.session_dir,

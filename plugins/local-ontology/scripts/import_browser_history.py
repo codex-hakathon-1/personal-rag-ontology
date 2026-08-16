@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 from contextlib import closing
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -17,27 +18,70 @@ import tempfile
 from typing import Any
 from urllib.parse import urlparse
 
+from import_records import CandidateEntity, ImportRecord
+
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_SCHEMA = PLUGIN_ROOT / "schema" / "canonical.sql"
+BROWSER_RECORD_SCHEMA = PLUGIN_ROOT / "schema" / "browser_history.sql"
 CHROMIUM_EPOCH = datetime(1601, 1, 1, tzinfo=timezone.utc)
 
-BROWSER_RECORD_SCHEMA = """
-CREATE TABLE IF NOT EXISTS browser_history_records (
-  record_id TEXT PRIMARY KEY,
-  world_id TEXT NOT NULL REFERENCES worlds(world_id),
-  source_ref TEXT NOT NULL,
-  url TEXT NOT NULL,
-  title TEXT NOT NULL,
-  host TEXT NOT NULL,
-  visit_count INTEGER NOT NULL,
-  last_visit_at TEXT NOT NULL,
-  content_hash TEXT NOT NULL,
-  UNIQUE (world_id, url)
-);
-CREATE INDEX IF NOT EXISTS browser_history_by_world_host
-  ON browser_history_records(world_id, host);
-"""
+
+@dataclass(frozen=True)
+class ChromiumVisit:
+    source_id: int
+    occurred_at: str
+
+
+@dataclass(frozen=True)
+class ChromiumPage:
+    source_id: int
+    url: str
+    title: str
+    host: str
+    visit_count: int
+    last_visit_at: str
+    visits: tuple[ChromiumVisit, ...]
+
+    def import_records(self) -> tuple[ImportRecord, ...]:
+        metadata = {
+            "url": self.url,
+            "title": self.title,
+            "host": self.host,
+            "visit_count": self.visit_count,
+            "last_visit_at": self.last_visit_at,
+        }
+        candidates = (
+            CandidateEntity("web_page", self.title),
+            CandidateEntity("topic", self.host),
+        )
+        return tuple(
+            ImportRecord(
+                source_kind="browser_history",
+                source_ref=self.url,
+                occurred_at=visit.occurred_at,
+                raw_text_or_metadata=metadata,
+                candidate_entities=candidates,
+                provenance={
+                    "chromium_url_id": self.source_id,
+                    "chromium_visit_id": visit.source_id,
+                },
+            )
+            for visit in self.visits
+        )
+
+
+@dataclass(frozen=True)
+class NodeCandidate:
+    node_id: str
+    world_id: str
+    type: str
+    canonical_name: str
+    summary: str
+    valid_from: str
+    last_seen_at: str
+    created_at: str
+    updated_at: str
 
 
 def _digest(*parts: str) -> str:
@@ -69,11 +113,14 @@ def _load_patterns(path: Path | None) -> list[tuple[str, re.Pattern[str]]]:
     return patterns
 
 
-def _read_history_copy(history_path: Path) -> list[dict[str, Any]]:
+def _read_history_copy(history_path: Path) -> list[ChromiumPage]:
     with tempfile.TemporaryDirectory(prefix="local-ontology-chromium-") as root:
         copy_path = Path(root) / "History"
         shutil.copyfile(history_path, copy_path)
-        uri = copy_path.resolve().as_uri() + "?mode=ro&immutable=1"
+        wal_path = Path(f"{history_path}-wal")
+        if wal_path.exists():
+            shutil.copyfile(wal_path, Path(f"{copy_path}-wal"))
+        uri = copy_path.resolve().as_uri() + "?mode=ro"
         with closing(sqlite3.connect(uri, uri=True)) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
@@ -86,7 +133,31 @@ def _read_history_copy(history_path: Path) -> list[dict[str, Any]]:
                 ORDER BY u.id, v.visit_time, v.id
                 """
             ).fetchall()
-            return [dict(row) for row in rows]
+    grouped_rows: dict[int, list[sqlite3.Row]] = defaultdict(list)
+    for row in rows:
+        grouped_rows[row["url_id"]].append(row)
+    pages = []
+    for page_rows in grouped_rows.values():
+        first = page_rows[0]
+        visits = tuple(
+            ChromiumVisit(row["visit_id"], _chromium_time(row["visit_time"]))
+            for row in page_rows
+            if row["visit_id"] is not None
+        )
+        if not visits:
+            visits = (ChromiumVisit(0, _chromium_time(first["last_visit_time"])),)
+        pages.append(
+            ChromiumPage(
+                source_id=first["url_id"],
+                url=first["url"],
+                title=first["title"] or first["url"],
+                host=(urlparse(first["url"]).hostname or "").lower(),
+                visit_count=first["visit_count"],
+                last_visit_at=_chromium_time(first["last_visit_time"]),
+                visits=visits,
+            )
+        )
+    return pages
 
 
 def _initialize_canonical(connection: sqlite3.Connection) -> None:
@@ -95,11 +166,10 @@ def _initialize_canonical(connection: sqlite3.Connection) -> None:
     ).fetchone()
     if not exists:
         connection.executescript(CANONICAL_SCHEMA.read_text(encoding="utf-8"))
-    else:
-        connection.executescript(BROWSER_RECORD_SCHEMA)
+    connection.executescript(BROWSER_RECORD_SCHEMA.read_text(encoding="utf-8"))
 
 
-def _upsert_node(connection: sqlite3.Connection, row: tuple[Any, ...]) -> None:
+def _upsert_node(connection: sqlite3.Connection, node: NodeCandidate) -> None:
     connection.execute(
         """
         INSERT INTO nodes (
@@ -114,7 +184,17 @@ def _upsert_node(connection: sqlite3.Connection, row: tuple[Any, ...]) -> None:
           last_seen_at = max(nodes.last_seen_at, excluded.last_seen_at),
           updated_at = max(nodes.updated_at, excluded.updated_at)
         """,
-        row,
+        (
+            node.node_id,
+            node.world_id,
+            node.type,
+            node.canonical_name,
+            node.summary,
+            node.valid_from,
+            node.last_seen_at,
+            node.created_at,
+            node.updated_at,
+        ),
     )
 
 
@@ -156,6 +236,47 @@ def _upsert_evidence(
     )
 
 
+def _remove_excluded_page(
+    connection: sqlite3.Connection,
+    world_id: str,
+    url: str,
+) -> None:
+    host = (urlparse(url).hostname or "").lower()
+    page_id = _identifier("web-page", world_id, url)
+    topic_id = _identifier("topic", world_id, host)
+    edge_id = _identifier("edge", world_id, url, host)
+    connection.execute(
+        "DELETE FROM evidence WHERE source_ref = ? OR node_id = ? OR edge_id = ?",
+        (url, page_id, edge_id),
+    )
+    connection.execute("DELETE FROM node_aliases WHERE node_id = ?", (page_id,))
+    connection.execute("DELETE FROM edges WHERE edge_id = ?", (edge_id,))
+    connection.execute(
+        "DELETE FROM browser_history_records WHERE world_id = ? AND url = ?",
+        (world_id, url),
+    )
+    connection.execute("DELETE FROM nodes WHERE node_id = ?", (page_id,))
+    connection.execute(
+        """
+        DELETE FROM nodes
+        WHERE node_id = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM evidence WHERE evidence.node_id = nodes.node_id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM edges
+            WHERE edges.from_node_id = nodes.node_id
+               OR edges.to_node_id = nodes.node_id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM node_aliases
+            WHERE node_aliases.node_id = nodes.node_id
+          )
+        """,
+        (topic_id,),
+    )
+
+
 def import_chromium_history(
     history_path: Path,
     canonical_path: Path,
@@ -163,33 +284,22 @@ def import_chromium_history(
     sensitive_patterns_path: Path | None = None,
 ) -> dict[str, Any]:
     patterns = _load_patterns(sensitive_patterns_path)
-    source_rows = _read_history_copy(history_path.resolve())
-    grouped: dict[int, list[dict[str, Any]]] = defaultdict(list)
-    for row in source_rows:
-        grouped[row["url_id"]].append(row)
-
+    pages = _read_history_copy(history_path.resolve())
     exclusions = {name: 0 for name, _ in patterns}
-    allowed: list[dict[str, Any]] = []
+    allowed_pages: list[ChromiumPage] = []
+    excluded_pages_to_remove: list[ChromiumPage] = []
     excluded_pages = 0
-    for rows in grouped.values():
-        page = rows[0]
+    for page in pages:
         matched_name = next(
-            (name for name, pattern in patterns if pattern.search(page["url"])),
+            (name for name, pattern in patterns if pattern.search(page.url)),
             None,
         )
         if matched_name is not None:
             exclusions[matched_name] += 1
             excluded_pages += 1
+            excluded_pages_to_remove.append(page)
             continue
-        page["visits"] = [
-            {"id": row["visit_id"], "time": row["visit_time"]}
-            for row in rows
-            if row["visit_id"] is not None
-        ]
-        if not page["visits"]:
-            page["visits"] = [{"id": 0, "time": page["last_visit_time"]}]
-        page["host"] = (urlparse(page["url"]).hostname or "").lower()
-        allowed.append(page)
+        allowed_pages.append(page)
 
     canonical_path = canonical_path.resolve()
     canonical_path.parent.mkdir(parents=True, exist_ok=True)
@@ -205,18 +315,19 @@ def import_chromium_history(
                 """,
                 (world_id, world_id.replace("-", " ").title()),
             )
-            for page in allowed:
-                url = page["url"]
-                title = page["title"] or url
-                host = page["host"]
-                visit_times = [_chromium_time(visit["time"]) for visit in page["visits"]]
-                first_visit = min(visit_times)
-                last_visit = _chromium_time(page["last_visit_time"])
+            for page in excluded_pages_to_remove:
+                _remove_excluded_page(connection, world_id, page.url)
+            for page in allowed_pages:
+                url = page.url
+                title = page.title
+                host = page.host
+                first_visit = min(visit.occurred_at for visit in page.visits)
+                last_visit = page.last_visit_at
                 page_id = _identifier("web-page", world_id, url)
                 topic_id = _identifier("topic", world_id, host)
                 edge_id = _identifier("edge", world_id, url, host)
                 record_hash = _digest(
-                    world_id, url, title, host, str(page["visit_count"]), last_visit
+                    world_id, url, title, host, str(page.visit_count), last_visit
                 )
                 connection.execute(
                     """
@@ -239,37 +350,37 @@ def import_chromium_history(
                         url,
                         title,
                         host,
-                        page["visit_count"],
+                        page.visit_count,
                         last_visit,
                         record_hash,
                     ),
                 )
                 _upsert_node(
                     connection,
-                    (
-                        page_id,
-                        world_id,
-                        "web_page",
-                        title,
-                        f"Visited {host} {page['visit_count']} time(s).",
-                        first_visit,
-                        last_visit,
-                        first_visit,
-                        last_visit,
+                    NodeCandidate(
+                        node_id=page_id,
+                        world_id=world_id,
+                        type="web_page",
+                        canonical_name=title,
+                        summary=f"Visited {host} {page.visit_count} time(s).",
+                        valid_from=first_visit,
+                        last_seen_at=last_visit,
+                        created_at=first_visit,
+                        updated_at=last_visit,
                     ),
                 )
                 _upsert_node(
                     connection,
-                    (
-                        topic_id,
-                        world_id,
-                        "topic",
-                        host,
-                        f"Chromium history topic candidate for {host}.",
-                        first_visit,
-                        last_visit,
-                        first_visit,
-                        last_visit,
+                    NodeCandidate(
+                        node_id=topic_id,
+                        world_id=world_id,
+                        type="topic",
+                        canonical_name=host,
+                        summary=f"Chromium history topic candidate for {host}.",
+                        valid_from=first_visit,
+                        last_seen_at=last_visit,
+                        created_at=first_visit,
+                        updated_at=last_visit,
                     ),
                 )
                 connection.execute(
@@ -290,52 +401,32 @@ def import_chromium_history(
                         page_id,
                         topic_id,
                         first_visit,
-                        len(page["visits"]),
+                        len(page.visits),
                         first_visit,
                         last_visit,
                     ),
                 )
-                for visit in page["visits"]:
-                    occurred_at = _chromium_time(visit["time"])
-                    content_hash = _digest(
-                        url,
-                        title,
-                        host,
-                        str(page["visit_count"]),
-                        occurred_at,
-                    )
+                for record in page.import_records():
                     excerpt = f"Visited {title} on {host}."
-                    visit_key = str(visit["id"])
-                    _upsert_evidence(
-                        connection,
-                        _identifier("evidence-page", world_id, url, visit_key),
-                        page_id,
-                        None,
-                        url,
-                        occurred_at,
-                        excerpt,
-                        content_hash,
+                    visit_key = str(record.provenance["chromium_visit_id"])
+                    targets = (
+                        ("page", page_id, None),
+                        ("topic", topic_id, None),
+                        ("edge", None, edge_id),
                     )
-                    _upsert_evidence(
-                        connection,
-                        _identifier("evidence-topic", world_id, url, visit_key),
-                        topic_id,
-                        None,
-                        url,
-                        occurred_at,
-                        excerpt,
-                        content_hash,
-                    )
-                    _upsert_evidence(
-                        connection,
-                        _identifier("evidence-edge", world_id, url, visit_key),
-                        None,
-                        edge_id,
-                        url,
-                        occurred_at,
-                        excerpt,
-                        content_hash,
-                    )
+                    for target, node_id, target_edge_id in targets:
+                        _upsert_evidence(
+                            connection,
+                            _identifier(
+                                f"evidence-{target}", world_id, url, visit_key
+                            ),
+                            node_id,
+                            target_edge_id,
+                            record.source_ref,
+                            record.occurred_at,
+                            excerpt,
+                            record.content_hash(),
+                        )
 
     return {
         "excludedPages": excluded_pages,
@@ -344,9 +435,9 @@ def import_chromium_history(
             for name, count in exclusions.items()
             if count
         ],
-        "importedPages": len(allowed),
-        "importedVisits": sum(len(page["visits"]) for page in allowed),
-        "topicCandidates": len({page["host"] for page in allowed}),
+        "importedPages": len(allowed_pages),
+        "importedVisits": sum(len(page.visits) for page in allowed_pages),
+        "topicCandidates": len({page.host for page in allowed_pages}),
         "world": world_id,
     }
 

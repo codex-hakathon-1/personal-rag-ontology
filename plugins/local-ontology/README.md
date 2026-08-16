@@ -42,8 +42,9 @@ model context only after an explicit `query_memory` SQL call.
 ## Import Chromium history
 
 Close the browser if its operating-system file permissions prevent copying its `History` file.
-The importer never opens the source database with a SQLite connection: it copies the file into a
-temporary directory, opens only that copy in read-only mode, and removes the copy afterward.
+The importer never opens the source database with a SQLite connection: it copies the `History`
+file and any live WAL companion into a temporary directory, opens only that copy in read-only
+mode, and removes the copy afterward.
 
 Configure URL exclusions as named regular expressions. Reports contain only each safe pattern
 name and its match count; excluded URL and title values are not written to the graph or report.

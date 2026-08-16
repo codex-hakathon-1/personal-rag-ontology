@@ -58,24 +58,9 @@ CREATE TABLE evidence (
   content_hash TEXT NOT NULL
 );
 
-CREATE TABLE browser_history_records (
-  record_id TEXT PRIMARY KEY,
-  world_id TEXT NOT NULL REFERENCES worlds(world_id),
-  source_ref TEXT NOT NULL,
-  url TEXT NOT NULL,
-  title TEXT NOT NULL,
-  host TEXT NOT NULL,
-  visit_count INTEGER NOT NULL,
-  last_visit_at TEXT NOT NULL,
-  content_hash TEXT NOT NULL,
-  UNIQUE (world_id, url)
-);
-
 CREATE INDEX nodes_by_world_type_state ON nodes(world_id, type, state);
 CREATE INDEX nodes_by_world_name ON nodes(world_id, canonical_name);
 CREATE INDEX aliases_by_alias ON node_aliases(alias);
 CREATE INDEX edges_by_world_source_state ON edges(world_id, from_node_id, state);
 CREATE INDEX edges_by_world_target_state ON edges(world_id, to_node_id, state);
 CREATE INDEX evidence_by_node_date ON evidence(node_id, occurred_at);
-CREATE INDEX browser_history_by_world_host
-  ON browser_history_records(world_id, host);

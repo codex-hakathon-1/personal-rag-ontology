@@ -141,6 +141,58 @@ class ChromiumHistoryImportTest(unittest.TestCase):
             self.assertEqual(report["importedPages"], 2)
             self.assertEqual(after, before)
 
+    def test_live_wal_source_imports_uncheckpointed_history(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            history_path = root / "History"
+            canonical_path = root / "canonical.sqlite3"
+            connection = sqlite3.connect(history_path)
+            try:
+                self.assertEqual(
+                    connection.execute("PRAGMA journal_mode = WAL").fetchone()[0],
+                    "wal",
+                )
+                connection.execute("PRAGMA wal_autocheckpoint = 0")
+                connection.executescript(
+                    HISTORY_FIXTURE.read_text(encoding="utf-8")
+                )
+                connection.commit()
+                wal_path = Path(f"{history_path}-wal")
+                self.assertTrue(wal_path.exists())
+                before = {
+                    path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                    for path in (history_path, wal_path)
+                }
+
+                report = self._import(history_path, canonical_path)
+
+                after = {
+                    path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                    for path in (history_path, wal_path)
+                }
+            finally:
+                connection.close()
+            self.assertEqual(report["importedVisits"], 3)
+            self.assertEqual(after, before)
+
+    def test_stricter_patterns_remove_previously_imported_sensitive_page(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            history_path = root / "History"
+            canonical_path = root / "canonical.sqlite3"
+            allow_all_path = root / "allow-all.json"
+            allow_all_path.write_text('{"patterns": []}\n', encoding="utf-8")
+            self._create_history(history_path)
+            first = self._import(history_path, canonical_path, allow_all_path)
+
+            second = self._import(history_path, canonical_path)
+
+            with closing(sqlite3.connect(canonical_path)) as connection:
+                graph_dump = "\n".join(connection.iterdump())
+            self.assertEqual(first["importedPages"], 3)
+            self.assertEqual(second["excludedPages"], 1)
+            self.assertNotIn(SENSITIVE_URL, graph_dump)
+
     def test_imported_page_is_retrievable_through_session_query(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -230,7 +282,12 @@ class ChromiumHistoryImportTest(unittest.TestCase):
             )
             self.assertRegex(rows[0]["content_hash"], r"^[0-9a-f]{64}$")
 
-    def _import(self, history_path, canonical_path):
+    def _import(
+        self,
+        history_path,
+        canonical_path,
+        sensitive_patterns=SENSITIVE_PATTERNS,
+    ):
         result = subprocess.run(
             [
                 sys.executable,
@@ -242,7 +299,7 @@ class ChromiumHistoryImportTest(unittest.TestCase):
                 "--world",
                 "travel",
                 "--sensitive-patterns",
-                str(SENSITIVE_PATTERNS),
+                str(sensitive_patterns),
             ],
             check=True,
             capture_output=True,
