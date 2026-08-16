@@ -131,7 +131,8 @@ def build_capability_connection(
 
 
 def build_session(
-    fixture_path: Path,
+    fixture_path: Path | None,
+    canonical_path: Path | None,
     policy_path: Path,
     selected_world: str,
     session_directory: Path,
@@ -140,18 +141,34 @@ def build_session(
 ) -> Path:
     if max_rows <= 0 or max_execution_ms <= 0:
         raise ValueError("Query limits must be positive integers")
-    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
     policies = json.loads(policy_path.read_text(encoding="utf-8")).get("worlds", {})
     if selected_world not in policies:
         raise ValueError(f"World {selected_world!r} is not configured by the policy")
-    fixture_worlds = {world["world_id"] for world in fixture.get("worlds", [])}
-    if selected_world not in fixture_worlds:
-        raise ValueError(f"World {selected_world!r} is not present in the fixture")
 
     session_directory = session_directory.resolve()
-    canonical_path = session_directory / "canonical.sqlite3"
+    session_directory.mkdir(parents=True, exist_ok=True)
     session_path = session_directory / "session.json"
-    _build_canonical(canonical_path, fixture)
+    if fixture_path is not None:
+        fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+        fixture_worlds = {world["world_id"] for world in fixture.get("worlds", [])}
+        if selected_world not in fixture_worlds:
+            raise ValueError(f"World {selected_world!r} is not present in the fixture")
+        canonical_path = session_directory / "canonical.sqlite3"
+        _build_canonical(canonical_path, fixture)
+    elif canonical_path is not None:
+        canonical_path = canonical_path.resolve()
+        canonical_uri = canonical_path.as_uri() + "?mode=ro"
+        with closing(sqlite3.connect(canonical_uri, uri=True)) as connection:
+            present = connection.execute(
+                "SELECT 1 FROM worlds WHERE world_id = ? AND enabled = 1",
+                (selected_world,),
+            ).fetchone()
+        if present is None:
+            raise ValueError(
+                f"World {selected_world!r} is not present in the canonical database"
+            )
+    else:
+        raise ValueError("Either a fixture or canonical database is required")
 
     session_identifier = uuid.uuid4().hex
     session = {
@@ -179,7 +196,9 @@ def build_session(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--fixture", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--fixture", type=Path)
+    source.add_argument("--canonical", type=Path)
     parser.add_argument("--policy", type=Path, required=True)
     parser.add_argument("--world", required=True)
     parser.add_argument("--session-dir", type=Path, required=True)
@@ -188,6 +207,7 @@ def main() -> None:
     arguments = parser.parse_args()
     session_path = build_session(
         arguments.fixture,
+        arguments.canonical,
         arguments.policy,
         arguments.world,
         arguments.session_dir,

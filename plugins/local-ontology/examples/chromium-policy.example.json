@@ -1,0 +1,10 @@
+{
+  "worlds": {
+    "travel": {
+      "include_sources": ["browser_history"],
+      "allow_node_types": ["web_page", "topic"],
+      "include_states": ["active"],
+      "deny_sensitivity": ["secret", "identity"]
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "patterns": [
+    {
+      "name": "account-credentials",
+      "regex": "bank\\.example\\.com/.*(?:token|key)="
+    }
+  ]
+}

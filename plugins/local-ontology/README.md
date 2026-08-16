@@ -39,6 +39,37 @@ in-memory capability database. Its initialization instructions contain only the 
 contract, schema guidance, selected world identifier, and policy contract. Fixture facts enter
 model context only after an explicit `query_memory` SQL call.
 
+## Import Chromium history
+
+Close the browser if its operating-system file permissions prevent copying its `History` file.
+The importer never opens the source database with a SQLite connection: it copies the file into a
+temporary directory, opens only that copy in read-only mode, and removes the copy afterward.
+
+Configure URL exclusions as named regular expressions. Reports contain only each safe pattern
+name and its match count; excluded URL and title values are not written to the graph or report.
+See `examples/chromium-sensitive-patterns.json` for the format.
+
+```powershell
+python plugins/local-ontology/scripts/import_browser_history.py `
+  --history "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\History" `
+  --canonical .local-ontology\canonical.sqlite3 `
+  --world travel `
+  --sensitive-patterns `
+    plugins/local-ontology/examples/chromium-sensitive-patterns.json
+
+python plugins/local-ontology/scripts/build_session.py `
+  --canonical .local-ontology\canonical.sqlite3 `
+  --policy plugins/local-ontology/examples/chromium-policy.example.json `
+  --world travel `
+  --session-dir .local-ontology-session
+```
+
+Chromium `urls` and `visits` rows become normalized `browser_history_records`, `web_page` and
+host-derived `topic` nodes, `about` edges, and dated evidence. URLs remain source references;
+content bodies are not captured. Stable identifiers and content hashes make unchanged re-imports
+idempotent. The supported fixture schema is documented by
+`examples/chromium-history-fixture.sql`.
+
 ## SQL safety boundary
 
 The query harness accepts one `SELECT` or `WITH` statement, including recursive CTEs, against
