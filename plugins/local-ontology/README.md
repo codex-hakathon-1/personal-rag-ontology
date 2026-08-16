@@ -79,6 +79,23 @@ The generated `.local-ontology-review/` directory contains a canonical database,
 database, session manifest, and payload-free query audit log. It is local runtime state, not part of
 the plugin package. Delete it after review if it is no longer needed.
 
+## Realistic synthetic user demo
+
+For a richer presentation scenario, the repository also includes a privacy-safe fictional Korean
+knowledge worker whose activity themes were generalized from owner-supplied local notes and AI
+assistant logs. The source fixture contains browser visits, four Codex conversations, and three
+fictional saved places; no raw conversation, real person name, private location, credential, or
+absolute local path is copied into it.
+
+```text
+python plugins/local-ontology/scripts/build_realistic_demo.py --session-dir demo-output/realistic-user
+```
+
+The command materializes the `work` capability database and prints import counts, policy-boundary
+counts, and provenance-bearing two-hop results for the aliases `챗봇 분석` and `내 기억 시스템`.
+See [`examples/realistic-user-demo/README.md`](examples/realistic-user-demo/README.md) for the
+fictional persona, source shapes, privacy transformations, and two additional presentation anchors.
+
 ## Happy path: direct recursive SQL
 
 `review_fixture.py` submits this ordinary SQL to the same `query_memory` MCP boundary used by the

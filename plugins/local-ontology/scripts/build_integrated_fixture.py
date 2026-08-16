@@ -91,8 +91,14 @@ def _insert_fixture_evidence(
     )
 
 
-def _apply_graph_overlay(canonical_path: Path, world_id: str) -> None:
-    overlay = json.loads(GRAPH_OVERLAY.read_text(encoding="utf-8"))
+def apply_graph_overlay(
+    canonical_path: Path,
+    world_id: str,
+    overlay_path: Path,
+) -> None:
+    """Add explicit fixture-only aliases, edges, and policy-boundary nodes."""
+
+    overlay = json.loads(overlay_path.read_text(encoding="utf-8"))
     with closing(sqlite3.connect(canonical_path)) as connection:
         connection.execute("PRAGMA foreign_keys = ON")
         with connection:
@@ -222,7 +228,7 @@ def build_integrated_fixture(
                 WORLD_ID,
             ),
         }
-        _apply_graph_overlay(canonical_path, WORLD_ID)
+        apply_graph_overlay(canonical_path, WORLD_ID, GRAPH_OVERLAY)
 
     session_path = build_session(
         CanonicalSource(canonical_path),
