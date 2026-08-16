@@ -13,7 +13,6 @@ from typing import Any
 
 from codex_log_parser import (
     CodexDocument,
-    CodexMessage,
     EntityType,
     ExtractedEntity,
     SourceEvidence,
@@ -295,13 +294,13 @@ def _record_for(
 
 def _record_for_message(
     document: CodexDocument,
-    message: CodexMessage,
+    message: SourceEvidence,
 ) -> ImportRecord:
     source_ref = f"codex://{document.relative_path}#L{message.line_number}"
     return _codex_import_record(
         document,
         source_ref,
-        message.source,
+        message,
         (
             CandidateEntity(EntityType.CONVERSATION.value, document.title),
         ),
@@ -405,7 +404,7 @@ def _upsert_entity_evidence(
         None,
         record.source_ref,
         record.occurred_at,
-        entity.excerpt,
+        entity.source.text,
         record.content_hash(),
     )
 
@@ -474,11 +473,7 @@ def _upsert_supersession(
             ExtractedEntity(
                 statement.type,
                 statement.replaced_name,
-                SourceEvidence(
-                    statement.line_number,
-                    statement.excerpt,
-                    statement.role,
-                ),
+                statement.source,
             ),
             document.occurred_at,
         )
@@ -489,7 +484,9 @@ def _upsert_supersession(
         "supersedes",
         replaced_id,
     )
-    source_ref = f"codex://{document.relative_path}#L{statement.line_number}"
+    source_ref = (
+        f"codex://{document.relative_path}#L{statement.source.line_number}"
+    )
     record = _codex_import_record(
         document,
         source_ref,
@@ -538,7 +535,7 @@ def _upsert_supersession(
         edge_id,
         source_ref,
         document.occurred_at,
-        statement.excerpt,
+        statement.source.text,
         record.content_hash(),
     )
     connection.execute(
@@ -589,7 +586,10 @@ def import_codex_logs(
                     source_ref = (
                         f"codex://{document.relative_path}#document"
                         if entity.type is EntityType.CONVERSATION
-                        else f"codex://{document.relative_path}#L{entity.line_number}"
+                        else (
+                            f"codex://{document.relative_path}"
+                            f"#L{entity.source.line_number}"
+                        )
                     )
                     record = _record_for(document, entity, source_ref)
                     _upsert_node(
@@ -628,7 +628,7 @@ def import_codex_logs(
                         world_id,
                         record,
                         "message",
-                        message.role,
+                        message.role or "unknown",
                     )
                     _upsert_evidence_row(
                         connection,
@@ -637,7 +637,7 @@ def import_codex_logs(
                             world_id,
                             record.source_ref,
                             "message",
-                            message.role,
+                            message.role or "unknown",
                         ),
                         conversation_id,
                         None,

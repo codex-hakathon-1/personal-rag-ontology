@@ -65,55 +65,12 @@ class ExtractedEntity:
     canonical_name: str
     source: SourceEvidence
 
-    @property
-    def line_number(self) -> int:
-        return self.source.line_number
-
-    @property
-    def excerpt(self) -> str:
-        return self.source.text
-
-    @property
-    def role(self) -> str | None:
-        return self.source.role
-
-
-@dataclass(frozen=True)
-class CodexMessage:
-    source: SourceEvidence
-
-    @property
-    def line_number(self) -> int:
-        return self.source.line_number
-
-    @property
-    def text(self) -> str:
-        return self.source.text
-
-    @property
-    def role(self) -> str:
-        assert self.source.role is not None
-        return self.source.role
-
-
 @dataclass(frozen=True)
 class SupersessionStatement:
     type: EntityType
     replacement_name: str
     replaced_name: str
     source: SourceEvidence
-
-    @property
-    def line_number(self) -> int:
-        return self.source.line_number
-
-    @property
-    def excerpt(self) -> str:
-        return self.source.text
-
-    @property
-    def role(self) -> str | None:
-        return self.source.role
 
 
 @dataclass(frozen=True)
@@ -124,7 +81,7 @@ class CodexDocument:
     occurred_at: str
     source_content_hash: str
     entities: tuple[ExtractedEntity, ...]
-    messages: tuple[CodexMessage, ...]
+    messages: tuple[SourceEvidence, ...]
     supersessions: tuple[SupersessionStatement, ...]
     redactions: dict[str, int]
 
@@ -271,7 +228,7 @@ def parse_document(
     )
     role: str | None = None
     message_lines: list[tuple[int, str]] = []
-    messages: list[CodexMessage] = []
+    messages: list[SourceEvidence] = []
     latest_claim: dict[EntityType, ExtractedEntity] = {}
     latest_any_claim: ExtractedEntity | None = None
     supersessions: list[SupersessionStatement] = []
@@ -281,12 +238,10 @@ def parse_document(
         meaningful = [(number, line) for number, line in message_lines if line.strip()]
         if role is not None and meaningful:
             messages.append(
-                CodexMessage(
-                    SourceEvidence(
-                        meaningful[0][0],
-                        "\n".join(line for _, line in meaningful).strip(),
-                        role,
-                    )
+                SourceEvidence(
+                    meaningful[0][0],
+                    "\n".join(line for _, line in meaningful).strip(),
+                    role,
                 )
             )
         message_lines = []
